@@ -3,7 +3,7 @@ BlueSky-QtGL tools       : Tools and objects that are used in the BlueSky-QtGL i
 
 Methods:
     load_texture(fname)  : GL-texture load function. Returns id of new texture
-    BlueSkyProgram()     : Constructor of a BlueSky shader program object: the main shader object in BlueSky-QtGL
+    ShaderProgram()     : Constructor of a BlueSky shader program object: the main shader object in BlueSky-QtGL
 
 
 Internal methods and classes:
@@ -78,7 +78,7 @@ class UniformBuffer(object):
         gl.glBufferSubData(gl.GL_UNIFORM_BUFFER, offset, size, self.pdata)
 
 
-class BlueSkyProgram():
+class ShaderProgram():
     # Static variables
     initialized = False
 
@@ -136,7 +136,7 @@ class BlueSkyProgram():
         gl.glUniformBlockBinding(self.program, idx, ubo.binding)
 
 
-class RenderObject(object):
+class VertexAttributeObject(object):
     # Attribute locations
     attrib_vertex, attrib_texcoords, attrib_lat, attrib_lon, \
         attrib_orientation, attrib_color, attrib_texdepth = list(range(7))
@@ -150,7 +150,7 @@ class RenderObject(object):
         self.vertex_count         = vertex_count
         self.n_instances          = n_instances
         self.max_instance_divisor = 0
-        self.single_colour        = None
+        self.single_color        = None
 
         if vertex is not None:
             self.bind_vertex(vertex)
@@ -168,9 +168,9 @@ class RenderObject(object):
         self.first_vertex = vertex
 
     def bind_attrib(self, attrib_id, size, data, storagetype=gl.GL_STATIC_DRAW, instance_divisor=0, datatype=gl.GL_FLOAT, stride=0, offset=None, normalize=False):
-        if RenderObject.bound_vao is not self.vao_id:
+        if VertexAttributeObject.bound_vao is not self.vao_id:
             gl.glBindVertexArray(self.vao_id)
-            RenderObject.bound_vao = self.vao_id
+            VertexAttributeObject.bound_vao = self.vao_id
 
         # Keep track of max instance divisor
         self.max_instance_divisor = max(instance_divisor, self.max_instance_divisor)
@@ -208,18 +208,18 @@ class RenderObject(object):
         self.vertexbuf = self.bind_attrib(self.attrib_vertex, 2, data, *args, **kwargs)
 
     def bind_color(self, data, storagetype=gl.GL_STATIC_DRAW, instance_divisor=0):
-        # One colour for everything in a  size 3/4 array? or an existing or new buffer
+        # One color for everything in a  size 3/4 array? or an existing or new buffer
         if np.size(data) in [3, 4]:
             # Add full alpha if none is given
-            self.single_colour = np.append(data, 255) if len(data) == 3 else data
+            self.single_color = np.append(data, 255) if len(data) == 3 else data
 
         else:
             self.colorbuf = self.bind_attrib(self.attrib_color, 4, data, storagetype, instance_divisor, datatype=gl.GL_UNSIGNED_BYTE, normalize=True)
 
     def bind(self):
-        if RenderObject.bound_vao != self.vao_id:
+        if VertexAttributeObject.bound_vao != self.vao_id:
             gl.glBindVertexArray(self.vao_id)
-            RenderObject.bound_vao = self.vao_id
+            VertexAttributeObject.bound_vao = self.vao_id
             for attrib in self.enabled_attributes:
                 gl.glEnableVertexAttribArray(attrib)
 
@@ -243,8 +243,8 @@ class RenderObject(object):
 
         if color is not None:
             gl.glVertexAttrib4Nub(self.attrib_color, *color)
-        elif self.single_colour is not None:
-            gl.glVertexAttrib4Nub(self.attrib_color, *self.single_colour)
+        elif self.single_color is not None:
+            gl.glVertexAttrib4Nub(self.attrib_color, *self.single_color)
 
         if n_instances > 0:
             gl.glDrawArraysInstanced(primitive_type, first_vertex, vertex_count, n_instances * self.max_instance_divisor)
@@ -255,13 +255,13 @@ class RenderObject(object):
     def unbind_all():
         gl.glBindVertexArray(0)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
-        RenderObject.bound_vao = -1
+        VertexAttributeObject.bound_vao = -1
 
     @staticmethod
     def copy(original):
         """ Copy a renderobject from one context to the other.
         """
-        new = RenderObject(original.primitive_type, original.first_vertex, original.vertex_count, original.n_instances)
+        new = VertexAttributeObject(original.primitive_type, original.first_vertex, original.vertex_count, original.n_instances)
 
         # Bind the same attributes for the new renderobject
         # [size, buf_id, instance_divisor, datatype]
@@ -331,7 +331,7 @@ class Font(object):
         return vertices, texcoords
 
     def prepare_text_string(self, text_string, char_size=16.0, text_color=(0.0, 1.0, 0.0), vertex_offset=(0.0, 0.0)):
-        ret = RenderObject(gl.GL_TRIANGLES, vertex_count=6 * len(text_string))
+        ret = VertexAttributeObject(gl.GL_TRIANGLES, vertex_count=6 * len(text_string))
 
         vertices, texcoords = [], []
         w, h = char_size, char_size * self.char_ar
@@ -350,7 +350,7 @@ class Font(object):
         return ret
 
     def prepare_text_instanced(self, text_array, textblock_size, origin_lat=None, origin_lon=None, text_color=None, char_size=16.0, vertex_offset=(0.0, 0.0)):
-        ret       = RenderObject(gl.GL_TRIANGLES, vertex_count=6)
+        ret       = VertexAttributeObject(gl.GL_TRIANGLES, vertex_count=6)
         w, h      = char_size, char_size * self.char_ar
         x, y      = vertex_offset
         v, t      = self.char(x, y, w, h)

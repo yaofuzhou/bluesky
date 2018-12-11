@@ -17,12 +17,12 @@ int ownid;
 int vertex_modifiers;   // Vertex modifiers
 };
 
-layout (location = 0) in vec2 vertex_in;
-layout (location = 1) in vec2 texcoords_in;
-layout (location = 2) in float lat_in;
-layout (location = 3) in float lon_in;
-layout (location = 4) in float orientation_in;
-layout (location = 5) in vec4 color_in;
+layout (location = 0) in vec2 vertex;
+layout (location = 1) in vec2 texcoords;
+layout (location = 2) in float lat;
+layout (location = 3) in float lon;
+layout (location = 4) in float orientation;
+layout (location = 5) in vec4 color;
 
 out vec4 color_fs;
 out vec2 texcoords_fs;
@@ -34,48 +34,48 @@ void main()
 	int vertex_scale_type     = vertex_modifiers % 10;
 	bool vertex_rotate_ownhdg = (vertex_modifiers >= VERTEX_ROTATE_OWN);
 	// Pass color and texture coordinates to the fragment shader
-	color_fs = color_in;
+	color_fs = color;
 
     vec2 flat_earth = vec2(cos(radians(ownlat)), 1.0);
     mat2 ownrot     = mat2(cos(radians(ownhdg)), sin(radians(ownhdg)),
                           -sin(radians(ownhdg)), cos(radians(ownhdg)));
-    mat2 symbolrot  = mat2(cos(radians(orientation_in)),-sin(radians(orientation_in)),
-                           sin(radians(orientation_in)), cos(radians(orientation_in)));
+    mat2 symbolrot  = mat2(cos(radians(orientation)),-sin(radians(orientation)),
+                           sin(radians(orientation)), cos(radians(orientation)));
 
-    vec2 position   = vec2(lon_in - ownlon, lat_in - ownlat);
+    vec2 position   = vec2(lon - ownlon, lat - ownlat);
 	// Vertex depends on scale type
 	vec2 vertex;
 	switch (vertex_scale_type) {
 		case VERTEX_IS_SCREEN:
 			// Vertex coordinates are screen pixels, so correct for screen size
 			if (vertex_rotate_ownhdg) {
-				vertex    = ownrot * (zoom * flat_earth * position + SYMBOLSCALE * symbolrot * vertex_in);
+				vertex    = ownrot * (zoom * flat_earth * position + SYMBOLSCALE * symbolrot * vertex);
 			} else {
-				vertex    = ownrot * (zoom * flat_earth * position) + SYMBOLSCALE * symbolrot * vertex_in;
+				vertex    = ownrot * (zoom * flat_earth * position) + SYMBOLSCALE * symbolrot * vertex;
 			}
-			texcoords_fs  = texcoords_in;
+			texcoords_fs  = texcoords;
 			break;
 
 		case VERTEX_IS_METERS:
 			// Vertex coordinates in meters use a right-handed coordinate system, where the positive x-axis points to the north
 			// The elements in each vertex therefore need to be flipped
-			vertex        = ownrot * zoom * (flat_earth * position + (degrees(vertex_in.yx * REARTH_INV)));
-			texcoords_fs  = texcoords_in.ts;
+			vertex        = ownrot * zoom * (flat_earth * position + (degrees(vertex.yx * REARTH_INV)));
+			texcoords_fs  = texcoords.ts;
 			break;
 
 		case VERTEX_IS_LATLON:
 			// Lat/lon vertex coordinates are flipped: lat is index 0, but screen y-axis, and lon is index 1, but screen x-axis
-			vertex        = ownrot * zoom * flat_earth * (position + vertex_in.yx);
-			texcoords_fs  = texcoords_in.ts;
+			vertex        = ownrot * zoom * flat_earth * (position + vertex.yx);
+			texcoords_fs  = texcoords.ts;
 			break;	
 
 		case VERTEX_IS_GLXY:
 			if (vertex_rotate_ownhdg) {
-				vertex    = ownrot * vertex_in;
+				vertex    = ownrot * vertex;
 			} else {
-				vertex = vertex_in;
+				vertex = vertex;
 			}
-			texcoords_fs  = texcoords_in;
+			texcoords_fs  = texcoords;
 			break;
 	}
 	gl_Position   = vec4(vertex.x, vertex.y - 0.7, 0.0, 1.0);

@@ -7,14 +7,14 @@ except ImportError:
     from PyQt4.QtCore import qCritical, QTimer
     from PyQt4.QtOpenGL import QGLWidget
     QT_VERSION = 4
-
+from os import path
 import OpenGL.GL as gl
 from math import sin, cos, radians
 import numpy as np
 from ctypes import c_float, c_int, Structure
 
 import bluesky as bs
-from .glhelpers import BlueSkyProgram, RenderObject, UniformBuffer
+from .glhelpers import ShaderSet, ShaderProgram, VertexAttributeObject
 
 VERTEX_IS_LATLON, VERTEX_IS_METERS, VERTEX_IS_SCREEN, VERTEX_IS_GLXY = list(range(4))
 ATTRIB_VERTEX, ATTRIB_TEXCOORDS, ATTRIB_LAT, ATTRIB_LON, ATTRIB_ORIENTATION, ATTRIB_COLOR, ATTRIB_TEXDEPTH = list(range(7))
@@ -27,15 +27,18 @@ lightblue2           = (148, 178, 235)
 lightblue3           = (220, 250, 255)
 
 
-class ndUBO(UniformBuffer):
-    class Data(Structure):
-        _fields_ = [("ownhdg", c_float), ("ownlat", c_float), ("ownlon", c_float),
-        ("zoom", c_float), ("ownid", c_int), ("vertex_modifiers", c_int)]
-
-    data = Data(0.0, 0.0, 0.0, 4.0, 3)
-
+class ndShaders(ShaderSet):
     def __init__(self):
-        super(ndUBO, self).__init__(self.data)
+        super().__init__()
+        class GlobalData(Structure):
+            _fields_ = [("ownhdg", c_float), ("ownlat", c_float), ("ownlon", c_float),
+            ("zoom", c_float), ("ownid", c_int), ("vertex_modifiers", c_int)]
+        self.data = GlobalData(0.0, 0.0, 0.0, 4.0, 3)
+
+    def load_shaders(self):
+        shpath = path.join(bs.settings.gfx_path, 'shaders')
+        self['normal'] = ShaderProgram(path.join(shpath, 'nd-normal.vert'), path.join(shpath, 'nd-color.frag'))
+        self['text'] = ShaderProgram(path.join(shpath, 'nd-text.vert'), path.join(shpath, 'nd-text.frag'))
 
     def set_zoom(self, zoom):
         self.data.zoom   = zoom
@@ -48,13 +51,13 @@ class ndUBO(UniformBuffer):
 
     def set_vertex_modifiers(self, scale_type, rotate_ownhdg):
         self.data.vertex_modifiers = scale_type + (10 if rotate_ownhdg else 0)
-        self.update()
+        self.global_data.update(self.data)
 
 
 class ND(QGLWidget):
     def __init__(self, parent=None, shareWidget=None):
         super(ND, self).__init__(parent=parent, shareWidget=shareWidget)
-
+        self.shaderset = ndShaders()
         self.shareWidget = shareWidget
         self.ac_id = ''
         self.n_aircraft = None
@@ -76,7 +79,7 @@ class ND(QGLWidget):
                 trk = data['trk'][idx]
                 tas = data['tas'][idx]
                 self.n_aircraft = len(data['lat'])
-                self.globaldata.set_owndata(idx, lat, lon, trk)
+                self.shaderset.set_owndata(idx, lat, lon, trk)
 
     def setAircraftID(self, ac_id):
         self.ac_id = ac_id
@@ -99,7 +102,7 @@ class ND(QGLWidget):
         edge = np.zeros(120, dtype=np.float32)
         edge[0:120:2] = 1.4 * np.sin(np.radians(np.arange(-60, 60, 2)))
         edge[1:120:2] = 1.4 * np.cos(np.radians(np.arange(-60, 60, 2)))
-        self.edge = RenderObject(gl.GL_LINE_STRIP, vertex=edge, color=white)
+        self.edge = VertexAttributeObject(gl.GL_LINE_STRIP, vertex=edge, color=white)
 
         arcs = []
         for i in range(1, 4):
@@ -110,7 +113,7 @@ class ND(QGLWidget):
                     arcs.append(float(i) * 0.35 * sin(radians(angle + 2)))
                     arcs.append(float(i) * 0.35 * cos(radians(angle + 2)))
         arcs = np.array(arcs, dtype=np.float32)
-        self.arcs = RenderObject(gl.GL_LINES, vertex=arcs, color=white)
+        self.arcs = VertexAttributeObject(gl.GL_LINES, vertex=arcs, color=white)
 
         mask = []
         for angle in range(-60, 60, 2):
@@ -119,14 +122,14 @@ class ND(QGLWidget):
             mask.append(1.4 * sin(radians(angle)))
             mask.append(1.4 * cos(radians(angle)))
         mask = np.array(mask, dtype=np.float32)
-        self.mask = RenderObject(gl.GL_TRIANGLE_STRIP, vertex=mask, color=black)
+        self.mask = VertexAttributeObject(gl.GL_TRIANGLE_STRIP, vertex=mask, color=black)
 
         ticks = np.zeros(288, dtype=np.float32)
         for i in range(72):
             ticktop = 1.46 if i % 6 == 0 else (1.44 if i % 2 == 0 else 1.42)
             ticks[4*i  :4*i+2] = (1.4 * sin(radians(i * 5)), 1.4 * cos(radians(i * 5)))
             ticks[4*i+2:4*i+4] = (ticktop * sin(radians(i * 5)), ticktop * cos(radians(i * 5)))
-        self.ticks = RenderObject(gl.GL_LINES, vertex=ticks, color=white)
+        self.ticks = VertexAttributeObject(gl.GL_LINES, vertex=ticks, color=white)
 
         ticklbls = np.zeros(24 * 36, dtype=np.float32)
         texcoords = np.zeros(36 * 36, dtype=np.float32)
@@ -149,24 +152,24 @@ class ND(QGLWidget):
             for j in range(12):
                 ticklbls[24*i+2*j:24*i+2*j+2] = rot.dot(tmp[j])
 
-        self.ticklbls = RenderObject(gl.GL_TRIANGLES, vertex=ticklbls, color=white, texcoords=texcoords)
+        self.ticklbls = VertexAttributeObject(gl.GL_TRIANGLES, vertex=ticklbls, color=white, texcoords=texcoords)
 
         vown = np.array([0.0, 0.0, 0.0, -0.12, 0.065, -0.03, -0.065, -0.03, 0.022, -0.1, -0.022, -0.1], dtype=np.float32)
-        self.ownship = RenderObject(gl.GL_LINES, vertex=vown, color=yellow)
+        self.ownship = VertexAttributeObject(gl.GL_LINES, vertex=vown, color=yellow)
 
         self.spdlabel_text = self.font.prepare_text_string('GS    TAS', 0.05, white, (-0.98, 1.6))
         self.spdlabel_val  = self.font.prepare_text_string('  000    000', 0.05, green, (-0.97, 1.6))
 
-        self.waypoints = RenderObject.copy(self.shareWidget.waypoints)
-        self.wptlabels = RenderObject.copy(self.shareWidget.wptlabels)
-        self.airports  = RenderObject.copy(self.shareWidget.airports)
-        self.aptlabels = RenderObject.copy(self.shareWidget.aptlabels)
-        self.protectedzone = RenderObject.copy(self.shareWidget.protectedzone)
-        self.ac_symbol = RenderObject.copy(self.shareWidget.ac_symbol)
-        self.aclabels = RenderObject.copy(self.shareWidget.aclabels)
+        self.waypoints = VertexAttributeObject.copy(self.shareWidget.waypoints)
+        self.wptlabels = VertexAttributeObject.copy(self.shareWidget.wptlabels)
+        self.airports  = VertexAttributeObject.copy(self.shareWidget.airports)
+        self.aptlabels = VertexAttributeObject.copy(self.shareWidget.aptlabels)
+        self.protectedzone = VertexAttributeObject.copy(self.shareWidget.protectedzone)
+        self.ac_symbol = VertexAttributeObject.copy(self.shareWidget.ac_symbol)
+        self.aclabels = VertexAttributeObject.copy(self.shareWidget.aclabels)
 
         # Unbind VAO, VBO
-        RenderObject.unbind_all()
+        VertexAttributeObject.unbind_all()
 
         # Done initializing
         self.initialized = True
@@ -184,23 +187,20 @@ class ND(QGLWidget):
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
 
-        self.globaldata = ndUBO()
-
         try:
+            self.shaderset.load_shaders()
             # Compile shaders and link color shader program
-            self.color_shader = BlueSkyProgram('data/graphics/shaders/nd-normal.vert', 'data/graphics/shaders/nd-color.frag')
-            self.color_shader.bind_uniform_buffer('global_data', self.globaldata)
+            self.color_shader = self.shaderset['normal']
 
             # Compile shaders and link text shader program
-            self.text_shader = BlueSkyProgram('data/graphics/shaders/nd-text.vert', 'data/graphics/shaders/nd-text.frag')
-            self.text_shader.bind_uniform_buffer('global_data', self.globaldata)
+            self.text_shader = self.shaderset['text']
 
         except RuntimeError as e:
             qCritical('Error compiling shaders in radarwidget: ' + e.args[0])
             return
 
         # Set initial zoom
-        self.globaldata.set_zoom(4.0)
+        self.shaderset.set_zoom(4.0)
 
         self.create_objects()
 
@@ -224,15 +224,15 @@ class ND(QGLWidget):
         # Select the non-textured shader
         self.color_shader.use()
 
-        self.globaldata.set_vertex_modifiers(VERTEX_IS_GLXY, False)
+        self.shaderset.set_vertex_modifiers(VERTEX_IS_GLXY, False)
         self.arcs.draw()
 
-        self.globaldata.set_vertex_modifiers(VERTEX_IS_METERS, False)
+        self.shaderset.set_vertex_modifiers(VERTEX_IS_METERS, False)
         self.protectedzone.draw(n_instances=self.n_aircraft)
-        self.globaldata.set_vertex_modifiers(VERTEX_IS_SCREEN, True)
+        self.shaderset.set_vertex_modifiers(VERTEX_IS_SCREEN, True)
         self.ac_symbol.draw(n_instances=self.n_aircraft)
 
-        self.globaldata.set_vertex_modifiers(VERTEX_IS_SCREEN, False)
+        self.shaderset.set_vertex_modifiers(VERTEX_IS_SCREEN, False)
         self.waypoints.bind()
         gl.glVertexAttrib4Nub(ATTRIB_COLOR, *(lightblue2 + (255,)))
         self.waypoints.draw()
@@ -259,12 +259,12 @@ class ND(QGLWidget):
         self.aclabels.draw(n_instances=self.n_aircraft)
 
         self.color_shader.use()
-        self.globaldata.set_vertex_modifiers(VERTEX_IS_GLXY, False)
+        self.shaderset.set_vertex_modifiers(VERTEX_IS_GLXY, False)
         self.ownship.draw()
         self.mask.draw()
         self.edge.draw()
 
-        self.globaldata.set_vertex_modifiers(VERTEX_IS_GLXY, True)
+        self.shaderset.set_vertex_modifiers(VERTEX_IS_GLXY, True)
         self.ticks.draw()
 
         # Select the text shader
@@ -273,10 +273,10 @@ class ND(QGLWidget):
         self.font.set_block_size((0, 0))
         self.ticklbls.draw()
 
-        self.globaldata.set_vertex_modifiers(VERTEX_IS_GLXY, False)
+        self.shaderset.set_vertex_modifiers(VERTEX_IS_GLXY, False)
         self.spdlabel_text.draw()
         self.spdlabel_val.draw()
 
         # Unbind everything
-        RenderObject.unbind_all()
+        VertexAttributeObject.unbind_all()
         gl.glUseProgram(0)

@@ -15,7 +15,7 @@ import numpy as np
 from glob import glob
 from math import sin, cos, radians
 from ctypes import c_float, c_int, c_void_p, Structure
-from glhelpers import BlueSkyProgram, RenderObject, Font, UniformBuffer, load_texture, update_buffer, rect
+from glhelpers import ShaderProgram, VertexAttributeObject, Font, UniformBuffer, load_texture, update_buffer, rect
 
 white                = (255, 255, 255)
 black                = (0,   0,   0)
@@ -129,7 +129,7 @@ class BlipDriver(QGLWidget):
         self.updownpos   = None
 
     def create_objects(self):
-        self.mcp         = RenderObject(gl.GL_TRIANGLES, vertex=np.array(rect(-1, -1, 2, 2), dtype=np.float32))
+        self.mcp         = VertexAttributeObject(gl.GL_TRIANGLES, vertex=np.array(rect(-1, -1, 2, 2), dtype=np.float32))
         self.mcp_texture = load_texture('mcp737.png')
         self.btn_tex     = load_texture('btn_led.png')
 
@@ -145,7 +145,7 @@ class BlipDriver(QGLWidget):
             v, t = Font.char(-0.886 + pos, 0.45, 0.03, 0.25)
             v_mcp_text += v
 
-        self.mcp_text       = RenderObject(gl.GL_TRIANGLES, vertex=np.array(v_mcp_text, dtype=np.float32))
+        self.mcp_text       = VertexAttributeObject(gl.GL_TRIANGLES, vertex=np.array(v_mcp_text, dtype=np.float32))
         self.lcd_charcoords = np.zeros(24 * 6, dtype=np.float32)
         self.lcdbuf         = self.mcp_text.bind_attrib(1, 1, self.lcd_charcoords, datatype=gl.GL_FLOAT)
 
@@ -157,14 +157,14 @@ class BlipDriver(QGLWidget):
                      (0.684, 0.34), (0.684, -0.34)]:
             btn_leds += rect(pos[0], pos[1], 0.055, 0.075)
         btn_color = np.zeros(14 * 6 * 4, dtype=np.uint8)
-        self.btn_leds = RenderObject(gl.GL_TRIANGLES, vertex=np.array(btn_leds, dtype=np.float32), color=btn_color)
+        self.btn_leds = VertexAttributeObject(gl.GL_TRIANGLES, vertex=np.array(btn_leds, dtype=np.float32), color=btn_color)
 
         # Button up/down indicator
         w, h, offset = 0.04, 0.16, 0.04
         triangles = np.array([-w, offset,  0.0, offset + h, w, offset,
                      -w, -offset, 0.0, -offset - h, w, -offset], dtype=np.float32)
         col_triangles = np.array(6 * [255, 255, 255, 180], dtype=np.uint8)
-        self.updown = RenderObject(gl.GL_TRIANGLES, vertex=triangles, color=col_triangles)
+        self.updown = VertexAttributeObject(gl.GL_TRIANGLES, vertex=triangles, color=col_triangles)
 
         # Use the same font as the radarwidget
         self.font = Font()
@@ -174,7 +174,7 @@ class BlipDriver(QGLWidget):
         edge = np.zeros(120, dtype=np.float32)
         edge[0:120:2] = 1.4 * np.sin(np.radians(np.arange(-60, 60, 2)))
         edge[1:120:2] = 1.4 * np.cos(np.radians(np.arange(-60, 60, 2)))
-        self.edge = RenderObject(gl.GL_LINE_STRIP, vertex=edge, color=white)
+        self.edge = VertexAttributeObject(gl.GL_LINE_STRIP, vertex=edge, color=white)
 
         arcs = []
         for i in range(1, 4):
@@ -185,7 +185,7 @@ class BlipDriver(QGLWidget):
                     arcs.append(float(i) * 0.35 * sin(radians(angle + 2)))
                     arcs.append(float(i) * 0.35 * cos(radians(angle + 2)))
         arcs = np.array(arcs, dtype=np.float32)
-        self.arcs = RenderObject(gl.GL_LINES, vertex=arcs, color=white)
+        self.arcs = VertexAttributeObject(gl.GL_LINES, vertex=arcs, color=white)
 
         mask = []
         for angle in range(-60, 60, 2):
@@ -194,14 +194,14 @@ class BlipDriver(QGLWidget):
             mask.append(1.4 * sin(radians(angle)))
             mask.append(1.4 * cos(radians(angle)))
         mask = np.array(mask, dtype=np.float32)
-        self.mask = RenderObject(gl.GL_TRIANGLE_STRIP, vertex=mask, color=black)
+        self.mask = VertexAttributeObject(gl.GL_TRIANGLE_STRIP, vertex=mask, color=black)
 
         ticks = np.zeros(288, dtype=np.float32)
         for i in range(72):
             ticktop = 1.46 if i % 6 == 0 else (1.44 if i % 2 == 0 else 1.42)
             ticks[4*i  :4*i+2] = (1.4 * sin(radians(i * 5)), 1.4 * cos(radians(i * 5)))
             ticks[4*i+2:4*i+4] = (ticktop * sin(radians(i * 5)), ticktop * cos(radians(i * 5)))
-        self.ticks = RenderObject(gl.GL_LINES, vertex=ticks, color=white)
+        self.ticks = VertexAttributeObject(gl.GL_LINES, vertex=ticks, color=white)
 
         ticklbls = np.zeros(24 * 36, dtype=np.float32)
         texcoords = np.zeros(36 * 36, dtype=np.float32)
@@ -224,17 +224,17 @@ class BlipDriver(QGLWidget):
             for j in range(12):
                 ticklbls[24*i+2*j:24*i+2*j+2] = rot.dot(tmp[j])
 
-        self.ticklbls = RenderObject(gl.GL_TRIANGLES, vertex=ticklbls, color=white, texcoords=texcoords)
+        self.ticklbls = VertexAttributeObject(gl.GL_TRIANGLES, vertex=ticklbls, color=white, texcoords=texcoords)
 
         vown = np.array([0.0, 0.0, 0.0, -0.12, 0.065, -0.03, -0.065, -0.03, 0.022, -0.1, -0.022, -0.1], dtype=np.float32)
-        self.ownship = RenderObject(gl.GL_LINES, vertex=vown, color=yellow)
+        self.ownship = VertexAttributeObject(gl.GL_LINES, vertex=vown, color=yellow)
 
         self.spdlabel_text = self.font.prepare_text_string('GS    TAS', 0.05, white, (-0.98, 1.6))
         self.spdlabel_val  = self.font.prepare_text_string('  000    000', 0.05, green, (-0.97, 1.6))
 
         self.initialized = True
         # Unbind everything
-        RenderObject.unbind_all()
+        VertexAttributeObject.unbind_all()
 
     def setAircraftID(self, ac_id):
         self.ac_id = ac_id
@@ -259,12 +259,12 @@ class BlipDriver(QGLWidget):
 
         # self.mcp_data       = mcpUBO()
         self.globaldata     = ndUBO()
-        self.mcp_col_shader = BlueSkyProgram('mcp.vert', 'color.frag')
-        self.mcp_tex_shader = BlueSkyProgram('mcp.vert', 'texture.frag')
-        self.mcp_txt_shader = BlueSkyProgram('mcp_text.vert', 'mcp_text.frag')
+        self.mcp_col_shader = ShaderProgram('mcp.vert', 'color.frag')
+        self.mcp_tex_shader = ShaderProgram('mcp.vert', 'texture.frag')
+        self.mcp_txt_shader = ShaderProgram('mcp_text.vert', 'mcp_text.frag')
 
-        self.color_shader   = BlueSkyProgram('normal.vert', 'color.frag')
-        self.text_shader    = BlueSkyProgram('text.vert', 'text.frag')
+        self.color_shader   = ShaderProgram('normal.vert', 'color.frag')
+        self.text_shader    = ShaderProgram('text.vert', 'text.frag')
         self.text_shader.bind_uniform_buffer('global_data', self.globaldata)
 
         self.create_objects()
@@ -338,7 +338,7 @@ class BlipDriver(QGLWidget):
         self.mcp_text.draw()
 
         # Unbind everything
-        RenderObject.unbind_all()
+        VertexAttributeObject.unbind_all()
         gl.glUseProgram(0)
 
     def update_lcd(self):
