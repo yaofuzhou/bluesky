@@ -342,6 +342,9 @@ class VertexAttributeObject(object):
         # Set passed attributes
         self.set_attribs(**attribs)
 
+    def set_primitive_type(self, primitive_type):
+        self.primitive_type = primitive_type
+
     def set_vertex_count(self, count):
         self.vertex_count = int(count)
 

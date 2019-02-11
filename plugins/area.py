@@ -6,6 +6,7 @@ import numpy as np
 from bluesky import traf, sim  #, settings, navdb, traf, sim, scr, tools
 from bluesky.tools import datalog, areafilter, \
     TrafficArrays, RegisterElementParameters
+from bluesky.tools.aero import ft
 from bluesky import settings
 
 # Log parameters for the flight statistics log
@@ -72,8 +73,8 @@ def init_plugin():
             "Define experiment area (area of interest)"
         ],
         "TAXI": [
-            "TAXI ON/OFF : OFF auto deletes traffic below 1500 ft",
-            "onoff",
+            "TAXI ON/OFF [alt] : OFF auto deletes traffic below 1500 ft",
+            "onoff[,alt]",
             area.set_taxi,
             "Switch on/off ground/low altitude mode, prevents auto-delete at 1500 ft"
         ]
@@ -87,15 +88,17 @@ class Area(TrafficArrays):
         super(Area, self).__init__()
         # Parameters of area
         self.active = False
-        self.dt     = 5.0     # [s] frequency of area check (simtime)
+        self.dt     = 0.5     # [s] frequency of area check (simtime)
         self.name   = None
-        self.swtaxi = False  # Default OFF: Doesn't do anything. See comments of set_taxi fucntion below.
+        self.swtaxi = True  # Default OFF: Doesn't do anything. See comments of set_taxi fucntion below.
+        self.swtaxialt = 1500.  # Default OFF: Doesn't do anything. See comments of set_taxi fucntion below.
 
         # The FLST logger
-        self.logger = datalog.defineLogger('FLSTLOG', header)
+        self.logger = datalog.crelog('FLSTLOG', None, header)
 
         with RegisterElementParameters(self):
             self.inside      = np.array([],dtype = np.bool) # In test area or not
+            self.oldalt      = np.array([])
             self.distance2D  = np.array([])
             self.distance3D  = np.array([])
             self.work        = np.array([])
@@ -104,11 +107,12 @@ class Area(TrafficArrays):
     def create(self, n=1):
         super(Area, self).create(n)
         self.create_time[-n:] = sim.simt
+        self.oldalt[-n:] = traf.alt[-n:]
 
     def update(self):
         ''' Update flight efficiency metrics
             2D and 3D distance [m], and work done (force*distance) [J] '''
-        if not self.active:
+        if self.swtaxi and not self.active:
             return
 
         resultantspd = np.sqrt(traf.gs * traf.gs + traf.vs * traf.vs)
@@ -120,14 +124,21 @@ class Area(TrafficArrays):
         else:
             self.work += (traf.perf.Thr * self.dt * resultantspd)
 
-        # ToDo: Add autodelete for descending with swTaxi:
-        if self.swtaxi:
-            pass # To be added!!!
+        # Autodelete for descending with swTaxi:
+        if not self.swtaxi:
+            #delidxalt = np.where(traf.alt<self.swtaxialt)[0]
+            delidxalt = np.where((self.oldalt>=self.swtaxialt)*(traf.alt<self.swtaxialt))[0]
+            self.oldalt = traf.alt
+        else:
+            delidxalt = []
+
+
 
         # Find out which aircraft are currently inside the experiment area, and
         # determine which aircraft need to be deleted.
         inside = areafilter.checkInside(self.name, traf.lat, traf.lon, traf.alt)
-        delidx = np.intersect1d(np.where(np.array(self.inside)==True), np.where(np.array(inside)==False))
+        #delidx = np.intersect1d(np.where(np.array(self.inside)==True), np.where(np.array(inside)==False))
+        delidx = np.where(np.array(self.inside)*(np.array(inside) == False))[0]
         self.inside = inside
 
         # Log flight statistics when for deleted aircraft
@@ -155,9 +166,13 @@ class Area(TrafficArrays):
                 traf.pilot.vs[delidx],
                 traf.pilot.hdg[delidx]
             )
-
             # delete all aicraft in self.delidx
             traf.delete(delidx)
+
+
+        # delete all aicraft in self.delidxalt
+        if len(delidxalt)>0:
+            traf.delete(list(delidxalt))
 
     def set_area(self, *args):
         ''' Set Experiment Area. Aicraft leaving the experiment area are deleted.
@@ -198,8 +213,7 @@ class Area(TrafficArrays):
         return False,  "Incorrect arguments" + \
                        "\nAREA Shapename/OFF or\n Area lat,lon,lat,lon,[top,bottom]"
 
-    def set_taxi(self, flag):
-        """ If you want to delete below 1500ft,
-            make an box with the bottom at 1500ft and set it to Area.
-            This is because taxi does nothing. """
-        self.swtaxi = flag
+    def set_taxi(self, flag,alt=1500*ft):
+        """ Taxi ON/OFF to autodelete below a certain altitude if taxi is off"""
+        self.swtaxi = flag # True =  taxi allowed, False = autodelete below swtaxialt
+        self.swtaxialt = alt

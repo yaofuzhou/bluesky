@@ -9,7 +9,7 @@ import numpy as np
 from math import *
 from random import randint
 import bluesky as bs
-from bluesky.tools import datalog, geo
+from bluesky.tools import geo
 from bluesky.tools.misc import latlon2txt
 from bluesky.tools.aero import fpm, kts, ft, g0, Rearth, nm, \
                          vatmos,  vtas2cas, vtas2mach, vcasormach
@@ -77,47 +77,38 @@ class Traffic(TrafficArrays):
         self.turbulence = Turbulence()
         self.translvl = 5000.*ft # [m] Default transition level
 
-        # Define the periodic loggers
-        # ToDo: explain what these line sdo in comments (type of logs?)
-        datalog.definePeriodicLogger('SNAPLOG', 'SNAPLOG logfile.', settings.snapdt)
-        datalog.definePeriodicLogger('INSTLOG', 'INSTLOG logfile.', settings.instdt)
-        datalog.definePeriodicLogger('SKYLOG', 'SKYLOG logfile.', settings.skydt)
-
         with RegisterElementParameters(self):
+            # Aircraft Info
+            self.id      = []  # identifier (string)
+            self.type    = []  # aircaft type (string)
 
-            # Register the following parameters for logging
-            with datalog.registerLogParameters('SNAPLOG', self):
-                # Aircraft Info
-                self.id      = []  # identifier (string)
-                self.type    = []  # aircaft type (string)
+            # Positions
+            self.lat     = np.array([])  # latitude [deg]
+            self.lon     = np.array([])  # longitude [deg]
+            self.alt     = np.array([])  # altitude [m]
+            self.hdg     = np.array([])  # traffic heading [deg]
+            self.trk     = np.array([])  # track angle [deg]
 
-                # Positions
-                self.lat     = np.array([])  # latitude [deg]
-                self.lon     = np.array([])  # longitude [deg]
-                self.alt     = np.array([])  # altitude [m]
-                self.hdg     = np.array([])  # traffic heading [deg]
-                self.trk     = np.array([])  # track angle [deg]
+            # Velocities
+            self.tas     = np.array([])  # true airspeed [m/s]
+            self.gs      = np.array([])  # ground speed [m/s]
+            self.gsnorth = np.array([])  # ground speed [m/s]
+            self.gseast  = np.array([])  # ground speed [m/s]
+            self.cas     = np.array([])  # calibrated airspeed [m/s]
+            self.M       = np.array([])  # mach number
+            self.vs      = np.array([])  # vertical speed [m/s]
 
-                # Velocities
-                self.tas     = np.array([])  # true airspeed [m/s]
-                self.gs      = np.array([])  # ground speed [m/s]
-                self.gsnorth = np.array([])  # ground speed [m/s]
-                self.gseast  = np.array([])  # ground speed [m/s]
-                self.cas     = np.array([])  # calibrated airspeed [m/s]
-                self.M       = np.array([])  # mach number
-                self.vs      = np.array([])  # vertical speed [m/s]
+            # Atmosphere
+            self.p       = np.array([])  # air pressure [N/m2]
+            self.rho     = np.array([])  # air density [kg/m3]
+            self.Temp    = np.array([])  # air temperature [K]
+            self.dtemp   = np.array([])  # delta t for non-ISA conditions
 
-                # Atmosphere
-                self.p       = np.array([])  # air pressure [N/m2]
-                self.rho     = np.array([])  # air density [kg/m3]
-                self.Temp    = np.array([])  # air temperature [K]
-                self.dtemp   = np.array([])  # delta t for non-ISA conditions
-
-                # Traffic autopilot settings
-                self.selspd = np.array([])  # selected spd(CAS or Mach) [m/s or -]
-                self.aptas  = np.array([])  # just for initializing
-                self.selalt = np.array([])  # selected alt[m]
-                self.selvs  = np.array([])  # selected vertical speed [m/s]
+            # Traffic autopilot settings
+            self.selspd = np.array([])  # selected spd(CAS or Mach) [m/s or -]
+            self.aptas  = np.array([])  # just for initializing
+            self.selalt = np.array([])  # selected alt[m]
+            self.selvs  = np.array([])  # selected vertical speed [m/s]
 
             # Whether to perform LNAV and VNAV
             self.swlnav   = np.array([], dtype=np.bool)
@@ -229,6 +220,24 @@ class Traffic(TrafficArrays):
         if acspd is None:
             acspd = np.random.randint(250, 450, n) * kts
 
+        # SAVEIC: save cre command when filled in
+        # Special provision in case SAVEIC is on: then save individual CRE commands
+        # Names of aircraft (acid) need to be recorded for saved future commands
+        # And positions need to be the same in case of *MCRE"
+
+        if type(aclat)==float or type(aclat)==int:
+            bs.stack.savecmd(" ".join(["CRE", acid[0], actype[0],
+                                       str(aclat), str(aclon), str(int(round(achdg))),
+                                       str(int(round(acalt/ft))),
+                                       str(int(round(acspd/kts)))]))
+        else:
+            for i in range(n):
+                bs.stack.savecmd(" ".join([ "CRE", acid[i], actype[i],
+                                            str(aclat[i]), str(aclon[i]), str(int(round(achdg[i]))),
+                                            str(int(round(acalt[i]/ft))),
+                                            str(int(round(acspd[i]/kts)))]))
+
+
         # Aircraft Info
         self.id[-n:]   = acid
         self.type[-n:] = actype
@@ -253,10 +262,12 @@ class Traffic(TrafficArrays):
 
         # Wind
         if self.wind.winddim > 0:
-            vnwnd, vewnd     = self.wind.getdata(self.lat[-n:], self.lon[-n:], self.alt[-n:])
-            self.gsnorth[-n:] = self.gsnorth[-n:] + vnwnd
-            self.gseast[-n:]  = self.gseast[-n:]  + vewnd
-            self.trk[-n:]     = np.degrees(np.arctan2(self.gseast[-n:], self.gsnorth[-n:]))
+            applywind         = self.alt[-n:]> 50.*ft
+            vnwnd, vewnd      = self.wind.getdata(self.lat[-n:], self.lon[-n:], self.alt[-n:])
+            self.gsnorth[-n:] = self.gsnorth[-n:] + vnwnd*applywind
+            self.gseast[-n:]  = self.gseast[-n:]  + vewnd*applywind
+            self.trk[-n:]     = np.logical_not(applywind)*achdg +\
+                                applywind*np.degrees(np.arctan2(self.gseast[-n:], self.gsnorth[-n:]))
             self.gs[-n:]      = np.sqrt(self.gsnorth[-n:]**2 + self.gseast[-n:]**2)
 
         # Traffic performance data
@@ -437,12 +448,17 @@ class Traffic(TrafficArrays):
             self.trk = self.hdg
 
         else:
-            windnorth, windeast = self.wind.getdata(self.lat, self.lon, self.alt)
-            self.gsnorth  = self.tas * np.cos(np.radians(self.hdg)) + windnorth
-            self.gseast   = self.tas * np.sin(np.radians(self.hdg)) + windeast
+            applywind = self.alt>50.*ft # Only apply wind when airborne and flying
 
-            self.gs  = np.sqrt(self.gsnorth**2 + self.gseast**2)
-            self.trk = np.degrees(np.arctan2(self.gseast, self.gsnorth)) % 360.
+            windnorth, windeast = self.wind.getdata(self.lat, self.lon, self.alt)
+            self.gsnorth  = self.tas * np.cos(np.radians(self.hdg)) + windnorth*applywind
+            self.gseast   = self.tas * np.sin(np.radians(self.hdg)) + windeast*applywind
+
+            self.gs  = np.logical_not(applywind)*self.tas + \
+                       applywind*np.sqrt(self.gsnorth**2 + self.gseast**2)
+
+            self.trk = np.logical_not(applywind)*self.hdg + \
+                       applywind*np.degrees(np.arctan2(self.gseast, self.gsnorth)) % 360.
 
     def UpdatePosition(self, simdt):
         # Update position
