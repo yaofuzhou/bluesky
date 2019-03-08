@@ -20,6 +20,7 @@ import os
 import os.path
 import subprocess
 import numpy as np
+from matplotlib import colors
 import bluesky as bs
 from bluesky.tools import geo, areafilter, plugin, plotter
 from bluesky.tools.aero import kts, ft, fpm, tas2cas, density
@@ -49,6 +50,8 @@ cmdsynon  = {"ADDAIRWAY": "ADDAWY",
              "AIRWAYS": "AIRWAY",
              "CALL": "PCALL",
              "CHDIR": "CD",
+             "COL": "COLOR",
+             "COLOUR": "COLOR",
              "CONTINUE": "OP",
              "CREATE": "CRE",
              "CLOSE": "QUIT",
@@ -129,7 +132,7 @@ sender_rte = None  # bs net route to sender
 # When SAVEIC is used, we will also have a recoding scenario file handle
 savefile = None # File object of recording scenario file
 defexcl = ["PAN","ZOOM","HOLD","POS","INSEDIT","SAVEIC","QUIT","PCALL","CALC","FF",
-           "IC","OP","HOLD","RESE","MCRE","CRE","TRAFGEN"] # Commands to be excluded, default
+           "IC","OP","HOLD","RESET","MCRE","CRE","TRAFGEN"] # Commands to be excluded, default
 saveexcl = defexcl
 saveict0 = 0.0 # simt time of moment of SAVEIC command, 00:00:00.00 in recorded file
 
@@ -188,7 +191,7 @@ def init(startup_scnfile):
         ],
         "ADDWPT": [
             "ADDWPT acid, (wpname/lat,lon/FLYBY/FLYOVER/ TAKEOFF,APT/RWY),[alt,spd,afterwp]",
-            "acid,wpt,[alt/txt,spd,wpinroute,wpinroute]",
+            "acid,wpt/txt,[alt,spd,wpinroute,wpinroute]",
             #
             # lambda *arg: short-hand for using function output as argument, equivalent with:
             #
@@ -294,6 +297,12 @@ def init(startup_scnfile):
             "txt,latlon,float,[alt,alt]",
             lambda name, *coords: areafilter.defineArea(name, 'CIRCLE', coords[:3], *coords[3:]),
             "Define a circle-shaped area"
+        ],
+        "COLOR": [
+            "COLOR name,color (named color or r,g,b)",
+            "txt,color",
+            bs.scr.color,
+            "Set a custom color for an aircraft or shape"
         ],
         "CRE": [
             "CRE acid,type,lat,lon,hdg,alt,spd",
@@ -473,6 +482,12 @@ def init(startup_scnfile):
             "string",
             bs.scr.cmdline,
             "Insert text op edit line in command window"
+        ],
+        "LEGEND": [
+            "LEGEND label1, ..., labeln",
+            "txt,...",
+            lambda *labels: plotter.legend(labels),
+            "Add a legend to the last created plot"
         ],
         "LINE": [
             "LINE name,lat,lon,lat,lon",
@@ -1033,6 +1048,13 @@ def sched_cmd(time, args, relative=False):
 def openfile(fname, pcall_arglst=None, mergeWithExisting=False):
     global scentime, scencmd
 
+    # Check for a/c id as first argument (use case: procedure files)
+    # CALL KL204 myproc should have effect as if: CALL myproc KL204
+    if mergeWithExisting and pcall_arglst and fname in bs.traf.id:
+        acid = fname
+        fname = pcall_arglst[0]
+        pcall_arglst = [acid]+list(pcall_arglst[1:])
+
     # Save original filename for if path splitting fails (relative path)
     orgfname = fname
 
@@ -1043,14 +1065,14 @@ def openfile(fname, pcall_arglst=None, mergeWithExisting=False):
 
     # Check whether file exists
 
-    # Split the incoming filename into a path, a filename and an extension
-    path, fname = os.path.split(os.path.normpath(fname))
+    # Split the incoming filename into a path + filename and an extension
     base, ext = os.path.splitext(fname)
-    path = path or os.path.normpath(settings.scenario_path)
+    if not os.path.isabs(base):
+        base = os.path.join(settings.scenario_path, base)
     ext = ext or '.scn'
 
     # The entire filename, possibly with added path and extension
-    fname_full = os.path.join(path, base + ext)
+    fname_full = os.path.normpath(base + ext)
 
     # If timestamps in file should be interpreted as relative we need to add
     # the current simtime to every timestamp
@@ -1058,14 +1080,8 @@ def openfile(fname, pcall_arglst=None, mergeWithExisting=False):
 
     # If this is a relative path we need to prefix scenario folder
     if not os.path.exists(fname_full):
-        if ".scn" not in orgfname.lower():
-            orgfname = orgfname+".scn"
-
-        if os.path.exists(settings.scenario_path + "/" + orgfname):
-            fname_full = settings.scenario_path + "/" + orgfname
-        else:
-            print("Openfile error: Cannot file", fname_full)
-            return False, "Error: cannot find file: " + fname_full
+        print("Openfile error: Cannot find file", fname_full)
+        return False, "Error: cannot find file: " + fname_full
 
     # Split scenario file line in times and commands
     if not mergeWithExisting:
@@ -1098,13 +1114,13 @@ def openfile(fname, pcall_arglst=None, mergeWithExisting=False):
                 imin = int(ttxt[1]) * 60.0
                 xsec = float(ttxt[2])
                 cmdtime = ihr + imin + xsec + t_offset
-                if not scentime or cmdtime > scentime[-1]:
+                if not scentime or cmdtime >= scentime[-1]:
                     scentime.append(cmdtime)
                     scencmd.append(line[icmdline + 1:].strip("\n"))
                 else:
                     if cmdtime > instime:
-                        insidx, instime = next(((i - 1, t)
-                            for i, t in enumerate(scentime) if t > cmdtime),
+                        insidx, instime = next(((i, t)
+                            for i, t in enumerate(scentime) if t >= cmdtime),
                                 (len(scentime), scentime[-1]))
                     scentime.insert(insidx, cmdtime)
                     scencmd.insert(insidx, line[icmdline + 1:].strip("\n"))
@@ -1740,6 +1756,18 @@ class Argparser:
             except ValueError:
                 self.error += 'Could not parse "' + curarg + '" as time'
                 return False
+        elif argtype == 'color':
+            try:
+                if curarg.isnumeric():
+                    g, args = getnextarg(args)
+                    b, args = getnextarg(args)
+                    result = [int(curarg), int(g), int(b)]
+                else:
+                    result = [int(255 * i) for i in colors.to_rgb(curarg)]
+            except ValueError:
+                self.error += 'Could not parse "' + curarg + '" as color'
+                return False
+
         else:
             # Argument not found: return False
             self.error += 'Unknown argument type: ' + argtype

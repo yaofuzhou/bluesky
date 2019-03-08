@@ -29,6 +29,7 @@ def crelog(name, dt=None, header=''):
     if dt:
         periodicloggers[name] = allloggers[name]
 
+    return allloggers[name]
 
 def preupdate(simt):
     pass
@@ -37,7 +38,7 @@ def preupdate(simt):
 def postupdate():
     """ This function writes to files of all periodic logs by calling the appropriate
     functions for each type of periodic log, at the approriate update time. """
-    for key, log in periodicloggers.items():
+    for log in periodicloggers.values():
         log.log()
 
 
@@ -48,7 +49,7 @@ def reset():
     CSVLogger.simt = 0.0
 
     # Close all logs and remove reference to its file object
-    for key, log in allloggers.items():
+    for log in allloggers.values():
         log.reset()
 
 
@@ -103,6 +104,7 @@ class CSVLogger:
         self.default_dt = dt
 
     def addvars(self, selection):
+        selvars = []
         while selection:
             parent = ''
             if selection[0] == 'FROM':
@@ -110,7 +112,15 @@ class CSVLogger:
                 del selection[0:2]
             vars = list(itertools.takewhile(lambda i: i != 'FROM', selection))
             selection = selection[len(vars):]
-            self.selvars.extend([ve.findvar(parent + '.' + v) for v in vars])
+            for v in vars:
+                varobj = ve.findvar(parent + '.' + v)
+                if varobj:
+                    selvars.append(varobj)
+                else:
+                    return False, 'Variable {} not found'.format(v)
+
+        self.selvars = selvars
+        return True
 
     def open(self, fname):
         if self.file:
@@ -192,6 +202,6 @@ class CSVLogger:
             self.reset()
 
         elif args[0] == 'ADD':
-            self.addvars(list(args[1:]))
+            return self.addvars(list(args[1:]))
 
         return True

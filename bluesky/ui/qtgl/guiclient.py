@@ -1,11 +1,8 @@
 ''' I/O Client implementation for the QtGL gui. '''
-try:
-    from PyQt5.QtCore import QTimer
-except ImportError:
-    from PyQt4.QtCore import QTimer
-
+from PyQt5.QtCore import QTimer
 import numpy as np
 
+from bluesky.ui import palette
 from bluesky.ui.polytools import PolygonSet
 from bluesky.network import Client
 from bluesky.tools import Signal
@@ -13,7 +10,7 @@ from bluesky.tools.aero import ft
 
 # Globals
 UPDATE_ALL = ['SHAPE', 'TRAILS', 'CUSTWPT', 'PANZOOM', 'ECHOTEXT']
-ACTNODE_TOPICS = [b'ACDATA', b'ROUTEDATA']
+ACTNODE_TOPICS = [b'ACDATA']
 
 
 class GuiClient(Client):
@@ -28,6 +25,7 @@ class GuiClient(Client):
         self.timer.start(20)
         self.subscribe(b'SIMINFO')
         self.subscribe(b'PLOT' + self.client_id)
+        self.subscribe(b'ROUTEDATA' + self.client_id)
 
         # Signals
         self.actnodedata_changed = Signal()
@@ -52,6 +50,10 @@ class GuiClient(Client):
         elif name == b'SHAPE':
             sender_data.update_poly_data(**data)
             data_changed.append('SHAPE')
+        elif name == b'COLOR':
+            sender_data.update_color_data(**data)
+            if 'polyid' in data:
+                data_changed.append('SHAPE')
         elif name == b'DEFWPT':
             sender_data.defwpt(**data)
             data_changed.append('CUSTWPT')
@@ -109,6 +111,7 @@ class nodeData(object):
     def clear_scen_data(self):
         # Clear all scenario-specific data for sender node
         self.polys = dict()
+        self.custacclr = dict()
         self.custwplbl = ''
         self.custwplat = np.array([], dtype=np.float32)
         self.custwplon = np.array([], dtype=np.float32)
@@ -155,7 +158,16 @@ class nodeData(object):
         if zoom:
             self.zoom = zoom * (1.0 if absolute else self.zoom)
 
-    def update_poly_data(self, name, shape='', coordinates=None):
+    def update_color_data(self, color, acid=None, polyid=None):
+        if acid:
+            self.custacclr[acid] = tuple(color)
+        else:
+            contourbuf, fillbuf, colorbuf = self.polys.get(polyid)
+            color = tuple(color) + (255,)
+            colorbuf = np.array(len(contourbuf) // 2 * color, dtype=np.uint8)
+            self.polys[polyid] = (contourbuf, fillbuf, colorbuf)
+
+    def update_poly_data(self, name, shape='', coordinates=None, color=None):
         # We're either updating a polygon, or deleting it. In both cases
         # we remove the current one.
         self.polys.pop(name, None)
@@ -225,9 +237,13 @@ class nodeData(object):
                 pset.addContour(newdata)
                 fillbuf = np.array(pset.vbuf, dtype=np.float32)
 
+            # Define color buffer for outline
+            defclr = tuple(color or palette.polys) + (255,)
+            colorbuf = np.array(len(contourbuf) // 2 * defclr, dtype=np.uint8)
+
             # Store new or updated polygon by name, and concatenated with the
             # other polys
-            self.polys[name] = (contourbuf, fillbuf)
+            self.polys[name] = (contourbuf, fillbuf, colorbuf)
 
     def defwpt(self, name, lat, lon):
         self.custwplbl += name[:10].ljust(10)

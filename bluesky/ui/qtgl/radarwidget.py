@@ -1,17 +1,10 @@
 from os import path
-try:
-    from PyQt5.QtCore import Qt, QEvent, qCritical, QTimer, QT_VERSION
-    from PyQt5.QtOpenGL import QGLWidget
-except ImportError:
-    from PyQt4.QtCore import Qt, QEvent, qCritical, QTimer, QT_VERSION
-    from PyQt4.QtOpenGL import QGLWidget
-
+from PyQt5.QtCore import Qt, QEvent, qCritical, QTimer, QT_VERSION
+from PyQt5.QtOpenGL import QGLWidget
 from ctypes import c_float, c_int, Structure
 import numpy as np
 import OpenGL.GL as gl
 
-
-# Local imports
 import bluesky as bs
 from bluesky import settings
 from bluesky.ui import palette
@@ -177,10 +170,13 @@ class RadarWidget(QGLWidget):
         # Shape data change
         if 'SHAPE' in changed_elems:
             if nodedata.polys:
-                contours, fills = zip(*nodedata.polys.values())
-                # Create contour buffer
+                contours, fills, colors = zip(*nodedata.polys.values())
+                # Create contour buffer with color
                 buf = np.concatenate(contours)
                 self.allpolysbuf.update(buf)
+
+                buf = np.concatenate(colors)
+                self.allpolysclrbuf.update(buf)
                 self.allpolys.set_vertex_count(len(buf) // 2)
 
                 # Create fill buffer
@@ -265,6 +261,7 @@ class RadarWidget(QGLWidget):
 
         self.polyprevbuf = GLBuffer(MAX_POLYPREV_SEGMENTS * 8, usage=gl.GL_DYNAMIC_DRAW)
         self.allpolysbuf = GLBuffer(MAX_ALLPOLYS_SEGMENTS * 16, usage=gl.GL_DYNAMIC_DRAW)
+        self.allpolysclrbuf = GLBuffer(MAX_ALLPOLYS_SEGMENTS * 8, usage=gl.GL_DYNAMIC_DRAW)
         self.allpfillbuf = GLBuffer(MAX_ALLPOLYS_SEGMENTS * 24, usage=gl.GL_DYNAMIC_DRAW)
 
         self.custwplatbuf = GLBuffer(MAX_CUST_WPT * 4, usage=gl.GL_STATIC_DRAW)
@@ -290,7 +287,7 @@ class RadarWidget(QGLWidget):
         self.polyprev = VertexAttributeObject(gl.GL_LINE_LOOP, vertex=self.polyprevbuf, color=palette.previewpoly)
 
         # Fixed polygons
-        self.allpolys = VertexAttributeObject(gl.GL_LINES, vertex=self.allpolysbuf, color=palette.polys)
+        self.allpolys = VertexAttributeObject(gl.GL_LINES, vertex=self.allpolysbuf, color=self.allpolysclrbuf)
         self.allpfill = VertexAttributeObject(gl.GL_TRIANGLES, vertex=self.allpfillbuf, color=np.append(palette.polys, 50))
 
         # ------- SSD object -----------------------------
@@ -592,9 +589,7 @@ class RadarWidget(QGLWidget):
 
         # update the window size
         # Qt5 supports getting the device pixel ratio, which can be > 1 for HiDPI displays such as Mac Retina screens
-        pixel_ratio = 1
-        if QT_VERSION >= 0x05:
-            pixel_ratio = self.devicePixelRatio()
+        pixel_ratio = self.devicePixelRatio()
 
         # Calculate zoom so that the window resize doesn't affect the scale, but only enlarges or shrinks the view
         zoom   = float(self.width) / float(width) * pixel_ratio
@@ -613,7 +608,7 @@ class RadarWidget(QGLWidget):
         if streamname == b'ACDATA':
             self.acdata = ACDataEvent(data)
             self.update_aircraft_data(self.acdata)
-        elif streamname == b'ROUTEDATA':
+        elif streamname[:9] == b'ROUTEDATA':
             self.routedata = RouteDataEvent(data)
             self.update_route_data(self.routedata)
 
@@ -738,7 +733,9 @@ class RadarWidget(QGLWidget):
                     cpalines[4 * confidx : 4 * confidx + 4] = [lat, lon, lat1, lon1]
                     confidx += 1
                 else:
-                    color[i, :] = palette.aircraft + (255,)
+                    # Get custom color if available, else default
+                    rgb = actdata.custacclr.get(acid, palette.aircraft)
+                    color[i, :] = tuple(rgb) + (255,)
 
                 #  Check if aircraft is selected to show SSD
                 if actdata.ssd_all or acid in actdata.ssd_ownship:

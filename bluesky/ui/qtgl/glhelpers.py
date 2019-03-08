@@ -35,6 +35,7 @@ import numpy as np
 from bluesky import settings
 
 from bluesky.ui.qtgl.dds import DDSTexture
+msg1282 = False # GL error 1282 when quitting should only be reported once
 
 # Register settings defaults
 settings.set_variable_defaults(gfx_path='data/graphics')
@@ -86,6 +87,7 @@ class GLBuffer:
             print('GLBuffer: Warning, trying to send more data to buffer than allocated size.')
         gl.glBindBuffer(self.target, self.buf_id)
         gl.glBufferSubData(self.target, offset, min(self.buf_size, size), dbuf)
+        # TODO: master branch has try/except for buffer writes after closing context
 
     @staticmethod
     def _raw(data):
