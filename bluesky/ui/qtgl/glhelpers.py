@@ -356,6 +356,7 @@ class VertexAttributeObject(object):
         self.shader_type = shader_type
         for name, attr in ShaderSet.selected[self.shader_type].attribs.items():
             setattr(self, name, VertexAttributeObject.Attrib(name, attr.loc, attr.size, self))
+        
         self.vao_id = gl.glGenVertexArrays(1)
         self.enabled_attributes = list()
         self.primitive_type = primitive_type

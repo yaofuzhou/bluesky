@@ -195,15 +195,6 @@ class RadarWidget(QGLWidget):
             self.panzoom(pan=nodedata.pan, zoom=nodedata.zoom, absolute=True)
 
     def create_objects(self):
-        if not self.isValid():
-            self.invalid_count += 1
-            print('Radarwidget: Context not valid in create_objects, count=%d' % self.invalid_count)
-            QTimer.singleShot(100, self.create_objects)
-            return
-
-        # Make the radarwidget context current, necessary when create_objects is not called from initializeGL
-        self.makeCurrent()
-
         text_size = settings.text_size
         apt_size = settings.apt_size
         wpt_size = settings.wpt_size
