@@ -179,10 +179,9 @@ class RadarWidget(QGLWidget):
         # Trail data change
         if 'TRAILS' in changed_elems:
             if len(nodedata.traillat0):
-                self.trailbuf.update(np.array(
+                self.traillines.update(vertex=np.array(
                     list(zip(nodedata.traillat0, nodedata.traillon0,
                              nodedata.traillat1, nodedata.traillon1)), dtype=np.float32))
-            self.traillines.set_vertex_count(4 * len(nodedata.traillat0))
 
         if 'CUSTWPT' in changed_elems:
             if nodedata.custwplbl:
