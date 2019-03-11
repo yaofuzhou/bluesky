@@ -167,17 +167,11 @@ class RadarWidget(QGLWidget):
             if nodedata.polys:
                 contours, fills, colors = zip(*nodedata.polys.values())
                 # Create contour buffer with color
-                buf = np.concatenate(contours)
-                self.allpolysbuf.update(buf)
-
-                buf = np.concatenate(colors)
-                self.allpolysclrbuf.update(buf)
-                self.allpolys.set_vertex_count(len(buf) // 2)
+                self.allpolys.update(vertex=np.concatenate(contours),
+                                     color=np.concatenate(colors))
 
                 # Create fill buffer
-                buf = np.concatenate(fills)
-                self.allpfillbuf.update(buf)
-                self.allpfill.set_vertex_count(len(buf) // 2)
+                self.allpfill.update(vertex=np.concatenate(fills))
             else:
                 self.allpolys.set_vertex_count(0)
                 self.allpfill.set_vertex_count(0)

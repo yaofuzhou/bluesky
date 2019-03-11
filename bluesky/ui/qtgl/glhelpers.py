@@ -301,6 +301,9 @@ class VertexAttributeObject(object):
         def enable(self):
             gl.glEnableVertexAttribArray(self.loc)
 
+        def update(self, *args, **kwargs):
+            self.buf.update(*args, **kwargs)
+
         def bind(self, data, usage=gl.GL_STATIC_DRAW, instance_divisor=0, datatype=gl.GL_FLOAT, stride=0, offset=None, normalize=False):
             if VertexAttributeObject.bound_vao is not self.parent.vao_id:
                 gl.glBindVertexArray(self.parent.vao_id)
@@ -373,6 +376,19 @@ class VertexAttributeObject(object):
 
     def set_first_vertex(self, vertex):
         self.first_vertex = vertex
+
+    def update(self, **attribs):
+        ''' Update one or more buffers for this object. '''
+        for name, data in attribs.items():
+            attrib = getattr(self, name, None)
+            if not isinstance(attrib, VertexAttributeObject.Attrib):
+                raise KeyError('Unknown attribute ' + name)
+            # Special attribs: color and vertex
+            if name == 'vertex' and isinstance(data, Collection):
+                self.vertex_count = np.size(data) // 2
+
+            # Update the buffer of the attribute
+            attrib.update(data)
 
     def set_attribs(self, usage=gl.GL_STATIC_DRAW, instance_divisor=0, datatype=gl.GL_FLOAT, stride=0, offset=None, normalize=False, **attribs):
         for name, data in attribs.items():
