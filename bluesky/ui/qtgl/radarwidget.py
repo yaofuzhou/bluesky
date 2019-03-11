@@ -73,17 +73,12 @@ class radarShaders(ShaderSet):
         self.data = GlobalData()
 
     def load_shaders(self):
-        shpath = path.join(settings.gfx_path, 'shaders')
-        # Compile shaders and link color shader program
-        self['normal'] = ShaderProgram(path.join(shpath, 'radarwidget-normal.vert'), path.join(shpath, 'radarwidget-color.frag'))
-
-        # Compile shaders and link texture shader program
-        self['textured'] = ShaderProgram(path.join(shpath, 'radarwidget-normal.vert'), path.join(shpath, 'radarwidget-texture.frag'))
-
-        # Compile shaders and link text shader program
-        self['text'] = ShaderProgram(path.join(shpath, 'radarwidget-text.vert'), path.join(shpath, 'radarwidget-text.frag'))
-
-        self['ssd'] = ShaderProgram(path.join(shpath, 'ssd.vert'), path.join(shpath, 'ssd.frag'), path.join(shpath, 'ssd.geom'))
+        self.set_shader_path(path.join(settings.gfx_path, 'shaders'))
+        # Load all shaders for this shader set
+        self.load_shader('normal', 'radarwidget-normal.vert', 'radarwidget-color.frag')
+        self.load_shader('textured', 'radarwidget-normal.vert', 'radarwidget-texture.frag')
+        self.load_shader('text', 'radarwidget-text.vert', 'radarwidget-text.frag')
+        self.load_shader('ssd', 'ssd.vert', 'ssd.frag', 'ssd.geom')
 
     def set_wrap(self, wraplon, wrapdir):
         self.data.wrapdir = wrapdir
@@ -102,14 +97,14 @@ class radarShaders(ShaderSet):
         if not flag:
             wrapdir = self.data.wrapdir
             self.data.wrapdir = 0
-            self.global_data.update(self.data, 0, 4)
+            self.update_ubo('global_data', self.data, 0, 4)
             self.data.wrapdir = wrapdir
         else:
-            self.global_data.update(self.data, 0, 4)
+            self.update_ubo('global_data', self.data, 0, 4)
 
     def set_vertex_scale_type(self, vertex_scale_type):
         self.data.vertex_scale_type = vertex_scale_type
-        self.global_data.update(self.data)
+        self.update_ubo('global_data', self.data)
 
 class RadarWidget(QGLWidget):
     def __init__(self, shareWidget=None):

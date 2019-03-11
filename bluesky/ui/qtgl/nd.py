@@ -30,9 +30,9 @@ class ndShaders(ShaderSet):
         self.data = GlobalData(0.0, 0.0, 0.0, 4.0, 3)
 
     def load_shaders(self):
-        shpath = path.join(bs.settings.gfx_path, 'shaders')
-        self['normal'] = ShaderProgram(path.join(shpath, 'nd-normal.vert'), path.join(shpath, 'nd-color.frag'))
-        self['text'] = ShaderProgram(path.join(shpath, 'nd-text.vert'), path.join(shpath, 'nd-text.frag'))
+        self.set_shader_path(path.join(bs.settings.gfx_path, 'shaders'))
+        self.load_shader('normal', 'nd-normal.vert', 'nd-color.frag')
+        self.load_shader('text', 'nd-text.vert', 'nd-text.frag')
 
     def set_zoom(self, zoom):
         self.data.zoom   = zoom
@@ -45,7 +45,7 @@ class ndShaders(ShaderSet):
 
     def set_vertex_modifiers(self, scale_type, rotate_ownhdg):
         self.data.vertex_modifiers = scale_type + (10 if rotate_ownhdg else 0)
-        self.global_data.update(self.data)
+        self.update_ubo('global_data', self.data)
 
 
 class ND(QGLWidget):

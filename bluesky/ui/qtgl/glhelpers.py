@@ -125,12 +125,33 @@ class ShaderSet(MutableMapping):
         super().__init__()
         self._programs = dict()
         self._ubos = dict()
+        self._spath = ''
         if ShaderSet.selected is None:
             self.select()
 
     def select(self):
         ''' Select this shader set. '''
         ShaderSet.selected = self
+
+    def update_ubo(self, uboname, *args, **kwargs):
+        ''' Update an uniform buffer object of this shader set. '''
+        ubo = self._ubos.get(uboname, None)
+        if not ubo:
+            raise KeyError('Uniform Buffer Object', uboname, 'not found in shader set.')
+        ubo.update(*args, **kwargs)
+
+    def set_shader_path(self, path):
+        ''' Set a search path for shader files. '''
+        self._spath = path
+
+    def load_shader(self, shader_name, vs, fs, gs=None, *args, **kwargs):
+        ''' Load a shader into this shader set.
+            default shader names are: normal, textured, and text. '''
+        vs = os.path.join(self._spath, vs)
+        fs = os.path.join(self._spath, fs)
+        if gs:
+            gs = os.path.join(self._spath, gs)
+        self[shader_name] = ShaderProgram(vs, fs, gs, *args, **kwargs)
 
     def __getitem__(self, key):
         ret = self._programs.get(key, None)
@@ -148,7 +169,7 @@ class ShaderSet(MutableMapping):
             if ubo is None:
                 ubo = GLBuffer.createubo(size)
                 self._ubos[name] = ubo
-                setattr(self, name, ubo)
+
             program.bind_uniform_buffer(name, ubo)
 
     def __delitem__(self, key):
