@@ -56,8 +56,8 @@ class Texture(QOpenGLTexture):
             self.allocateStorage()
             self.setCompressedData(len(tex.data), tex.data)
         else:
-            self.setData(QImage('data/graphics/world_small.jpg'))
-            self.tex.setWrapMode(self.tex.Repeat)
+            self.setData(QImage(fname))
+            self.setWrapMode(QOpenGLTexture.Repeat)
 
 
 class GLBuffer:
