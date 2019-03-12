@@ -47,11 +47,11 @@ palette.set_default_colors(
 # Static defines
 MAX_NAIRCRAFT = 10000
 MAX_NCONFLICTS = 25000
-MAX_ROUTE_LENGTH = 500
-MAX_POLYPREV_SEGMENTS = 100
-MAX_ALLPOLYS_SEGMENTS = 2000
-MAX_CUST_WPT = 1000
-MAX_TRAILLEN = MAX_NAIRCRAFT * 1000
+ROUTE_SIZE = 500
+POLYPREV_SIZE = 100
+POLY_SIZE = 2000
+CUSTWP_SIZE = 1000
+TRAILS_SIZE = MAX_NAIRCRAFT * 1000
 
 REARTH_INV = 1.56961231e-7
 
@@ -185,9 +185,9 @@ class RadarWidget(QGLWidget):
 
         if 'CUSTWPT' in changed_elems:
             if nodedata.custwplbl:
+                self.customwp.update(lat=nodedata.custwplat,
+                                     lon=nodedata.custwplon)
                 self.custwplblbuf.update(np.array(nodedata.custwplbl, dtype=np.string_))
-                self.custwplatbuf.update(nodedata.custwplat)
-                self.custwplonbuf.update(nodedata.custwplon)
             self.ncustwpts = len(nodedata.custwplat)
 
         # Update pan/zoom
@@ -208,11 +208,13 @@ class RadarWidget(QGLWidget):
         # Load and bind world texture
         max_texture_size = gl.glGetIntegerv(gl.GL_MAX_TEXTURE_SIZE)
         print('Maximum supported texture size: %d' % max_texture_size)
+        map_texname = ''
         for i in [16384, 8192, 4096]:
             if max_texture_size >= i:
                 fname = path.join(settings.gfx_path, 'world.%dx%d.dds' % (i, i // 2))
                 print('Loading texture ' + fname)
-                self.map_texture.load(fname)
+                # self.map_texture.load(fname)
+                map_texname = fname
                 break
 
         # Create initial empty buffers for aircraft position, orientation, label, and color
@@ -230,26 +232,17 @@ class RadarWidget(QGLWidget):
         self.accolorbuf = GLBuffer(MAX_NAIRCRAFT * 4, usage=gl.GL_STREAM_DRAW)
         self.aclblbuf = GLBuffer(MAX_NAIRCRAFT * 24, usage=gl.GL_STREAM_DRAW)
         self.confcpabuf = GLBuffer(MAX_NCONFLICTS * 16, usage=gl.GL_STREAM_DRAW)
-        self.trailbuf = GLBuffer(MAX_TRAILLEN * 16, usage=gl.GL_STREAM_DRAW)
         self.asasnbuf = GLBuffer(MAX_NAIRCRAFT * 4, usage=gl.GL_STREAM_DRAW)
         self.asasebuf = GLBuffer(MAX_NAIRCRAFT * 4, usage=gl.GL_STREAM_DRAW)
-        self.routebuf = GLBuffer(MAX_ROUTE_LENGTH * 8, usage=gl.GL_DYNAMIC_DRAW)
-        self.routewplatbuf = GLBuffer(MAX_ROUTE_LENGTH * 4, usage=gl.GL_DYNAMIC_DRAW)
-        self.routewplonbuf = GLBuffer(MAX_ROUTE_LENGTH * 4, usage=gl.GL_DYNAMIC_DRAW)
-        self.routelblbuf = GLBuffer(MAX_ROUTE_LENGTH * 2*12, usage=gl.GL_DYNAMIC_DRAW)
+        self.routewplatbuf = GLBuffer(ROUTE_SIZE * 4, usage=gl.GL_DYNAMIC_DRAW)
+        self.routewplonbuf = GLBuffer(ROUTE_SIZE * 4, usage=gl.GL_DYNAMIC_DRAW)
+        self.routelblbuf = GLBuffer(ROUTE_SIZE * 2*12, usage=gl.GL_DYNAMIC_DRAW)
 
-        self.polyprevbuf = GLBuffer(MAX_POLYPREV_SEGMENTS * 8, usage=gl.GL_DYNAMIC_DRAW)
-        self.allpolysbuf = GLBuffer(MAX_ALLPOLYS_SEGMENTS * 16, usage=gl.GL_DYNAMIC_DRAW)
-        self.allpolysclrbuf = GLBuffer(MAX_ALLPOLYS_SEGMENTS * 8, usage=gl.GL_DYNAMIC_DRAW)
-        self.allpfillbuf = GLBuffer(MAX_ALLPOLYS_SEGMENTS * 24, usage=gl.GL_DYNAMIC_DRAW)
-
-        self.custwplatbuf = GLBuffer(MAX_CUST_WPT * 4, usage=gl.GL_STATIC_DRAW)
-        self.custwplonbuf = GLBuffer(MAX_CUST_WPT * 4, usage=gl.GL_STATIC_DRAW)
-        self.custwplblbuf = GLBuffer(MAX_CUST_WPT * 10, usage=gl.GL_STATIC_DRAW)
+        self.custwplblbuf = GLBuffer(CUSTWP_SIZE * 10, usage=gl.GL_STATIC_DRAW)
 
         # ------- Map ------------------------------------
         texcoords = np.array([(1, 3), (1, 0), (0, 0), (0, 3)], dtype=np.float32)
-        self.map = Rectangle(1080.0, 180.0, True, texcoords=texcoords)
+        self.map = Rectangle(1080.0, 180.0, True, texcoords=texcoords, texture=map_texname)
 
         # ------- Coastlines -----------------------------
         self.coastlines = VertexAttributeObject(gl.GL_LINES, vertex=self.coastvertices, color=palette.coastlines)
@@ -263,11 +256,11 @@ class RadarWidget(QGLWidget):
         self.pavement = VertexAttributeObject(gl.GL_TRIANGLES, vertex=self.vbuf_concrete, color=palette.pavement)
 
         # Polygon preview object
-        self.polyprev = VertexAttributeObject(gl.GL_LINE_LOOP, vertex=self.polyprevbuf, color=palette.previewpoly)
+        self.polyprev = VertexAttributeObject(gl.GL_LINE_LOOP, vertex=POLYPREV_SIZE * 8, color=palette.previewpoly, usage=gl.GL_DYNAMIC_DRAW)
 
         # Fixed polygons
-        self.allpolys = VertexAttributeObject(gl.GL_LINES, vertex=self.allpolysbuf, color=self.allpolysclrbuf)
-        self.allpfill = VertexAttributeObject(gl.GL_TRIANGLES, vertex=self.allpfillbuf, color=np.append(palette.polys, 50))
+        self.allpolys = VertexAttributeObject(gl.GL_LINES, vertex=POLY_SIZE * 16, color=POLY_SIZE * 8)
+        self.allpfill = VertexAttributeObject(gl.GL_TRIANGLES, vertex=POLY_SIZE * 24, color=np.append(palette.polys, 50))
 
         # ------- SSD object -----------------------------
         self.ssd = VertexAttributeObject(gl.GL_POINTS, shader_type='ssd')
@@ -296,7 +289,7 @@ class RadarWidget(QGLWidget):
         self.cpalines = VertexAttributeObject(gl.GL_LINES, vertex=self.confcpabuf, color=palette.conflict)
 
         # ------- Aircraft Route -------------------------
-        self.route = VertexAttributeObject(gl.GL_LINES, vertex=self.routebuf, color=palette.route)
+        self.route = VertexAttributeObject(gl.GL_LINES, vertex=ROUTE_SIZE * 8, color=palette.route, usage=gl.GL_DYNAMIC_DRAW)
         self.routelbl = self.font.prepare_text_instanced(self.routelblbuf, (12, 2), self.routewplatbuf, self.routewplonbuf, char_size=text_size, vertex_offset=(wpt_size, 0.5 * wpt_size))
         self.routelbl.color.bind(palette.route)
         rwptvertices = np.array([(-0.2 * wpt_size, -0.2 * wpt_size),
@@ -311,7 +304,7 @@ class RadarWidget(QGLWidget):
         self.rwaypoints.set_attribs(lat=self.routewplatbuf, lon=self.routewplonbuf, instance_divisor=1)
 
         # --------Aircraft Trails------------------------------------------------
-        self.traillines = VertexAttributeObject(gl.GL_LINES, vertex=self.trailbuf, color=palette.trails)
+        self.traillines = VertexAttributeObject(gl.GL_LINES, vertex=TRAILS_SIZE * 16, color=palette.trails)
 
         # ------- Waypoints ------------------------------
         wptvertices = np.array([(0.0, 0.5 * wpt_size), (-0.5 * wpt_size, -0.5 * wpt_size), (0.5 * wpt_size, -0.5 * wpt_size)], dtype=np.float32)  # a triangle
@@ -331,9 +324,9 @@ class RadarWidget(QGLWidget):
         self.wptlabels = self.font.prepare_text_instanced(npwpids, (5, 1), self.waypoints.lat, self.waypoints.lon, char_size=text_size, vertex_offset=(wpt_size, 0.5 * wpt_size))
         self.wptlabels.color.bind(palette.wptlabel)
         del wptids
-        self.customwp = VertexAttributeObject(gl.GL_LINE_LOOP, vertex=wptvertices, color=palette.wptsymbol)
-        self.customwp.set_attribs(lat=self.custwplatbuf, lon=self.custwplonbuf, instance_divisor=1)
-        self.customwplbl = self.font.prepare_text_instanced(self.custwplblbuf, (10, 1), self.custwplatbuf, self.custwplonbuf, char_size=text_size, vertex_offset=(wpt_size, 0.5 * wpt_size))
+        self.customwp = VertexAttributeObject(gl.GL_LINE_LOOP, vertex=self.waypoints.vertex, color=palette.wptsymbol)
+        self.customwp.set_attribs(lat=CUSTWP_SIZE * 4, lon=CUSTWP_SIZE * 4, instance_divisor=1)
+        self.customwplbl = self.font.prepare_text_instanced(self.custwplblbuf, (10, 1), self.customwp.lat, self.customwp.lon, char_size=text_size, vertex_offset=(wpt_size, 0.5 * wpt_size))
         self.customwplbl.color.bind(palette.wptlabel)
         # ------- Airports -------------------------------
         aptvertices = np.array([(-0.5 * apt_size, -0.5 * apt_size), (0.5 * apt_size, -0.5 * apt_size), (0.5 * apt_size, 0.5 * apt_size), (-0.5 * apt_size, 0.5 * apt_size)], dtype=np.float32)  # a square
@@ -432,14 +425,14 @@ class RadarWidget(QGLWidget):
 
         if actdata.show_map:
             # Select the texture shader
-            self.texture_shader.use()
+            # self.texture_shader.use()
 
             # Draw map texture
-            self.map_texture.bind()
+            # self.map_texture.bind()
             self.map.draw()
 
         # Select the non-textured shader
-        self.color_shader.use()
+        # self.color_shader.use()
 
         # Draw coastlines
         if actdata.show_coast:
@@ -612,7 +605,7 @@ class RadarWidget(QGLWidget):
             routedata[6::4] = data.wplat[1:]
             routedata[7::4] = data.wplon[1:]
 
-            self.routebuf.update(routedata)
+            self.route.update(vertex=routedata)
             self.routewplatbuf.update(np.array(data.wplat, dtype=np.float32))
             self.routewplonbuf.update(np.array(data.wplon, dtype=np.float32))
             wpname = ''
@@ -731,7 +724,7 @@ class RadarWidget(QGLWidget):
             if self.route_acid != "":
                 if self.route_acid in data.id:
                     idx = data.id.index(self.route_acid)
-                    self.routebuf.update(
+                    self.route.vertex.update(
                                   np.array([data.lat[idx], data.lon[idx]], dtype=np.float32))
 
             # Update trails database with new lines
@@ -740,15 +733,12 @@ class RadarWidget(QGLWidget):
                 actdata.traillon0.extend(data.traillon0)
                 actdata.traillat1.extend(data.traillat1)
                 actdata.traillon1.extend(data.traillon1)
-                self.trailbuf.update(np.array(
+                self.traillines.update(vertex=np.array(
                     list(zip(actdata.traillat0, actdata.traillon0,
                              actdata.traillat1, actdata.traillon1)) +
                     list(zip(data.traillastlat, data.traillastlon,
                              list(data.lat), list(data.lon))),
                     dtype=np.float32))
-
-                self.traillines.set_vertex_count(2 * len(actdata.traillat0) +
-                                                 2 * len(data.lat))
 
             else:
                 actdata.traillat0 = []
@@ -785,8 +775,7 @@ class RadarWidget(QGLWidget):
         else:
             self.polyprev.set_primitive_type(gl.GL_LINE_LOOP)
 
-        self.polyprevbuf.update(data)
-        self.polyprev.set_vertex_count(int(len(data) / 2))
+        self.polyprev.update(vertex=data)
 
     def pixelCoordsToGLxy(self, x, y):
         """Convert screen pixel coordinates to GL projection coordinates (x, y range -1 -- 1)

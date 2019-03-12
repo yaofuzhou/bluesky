@@ -351,7 +351,7 @@ class VertexAttributeObject(object):
             # Add this attribute to enabled attributes
             self.parent.enabled_attributes.append(self)
 
-    def __init__(self, primitive_type=None, first_vertex=0, vertex_count=0, n_instances=0, shader_type='normal', **attribs):
+    def __init__(self, primitive_type=None, n_instances=0, shader_type='normal', texture=None, **attribs):
         # Get attributes for the target shader type
         self.shader_type = shader_type
         for name, attr in ShaderSet.selected[self.shader_type].attribs.items():
@@ -360,11 +360,18 @@ class VertexAttributeObject(object):
         self.vao_id = gl.glGenVertexArrays(1)
         self.enabled_attributes = list()
         self.primitive_type = primitive_type
-        self.first_vertex = first_vertex
-        self.vertex_count = vertex_count
+        self.first_vertex = 0
+        self.vertex_count = 0
         self.n_instances = n_instances
         self.max_instance_divisor = 0
         self.single_color = None
+
+        # Set texture if passed
+        self.texture = None
+        if texture:
+            self.texture = Texture(texture)
+            if shader_type == 'normal':
+                self.shader_type = 'textured'
 
         # Set passed attributes
         self.set_attribs(**attribs)
@@ -424,11 +431,13 @@ class VertexAttributeObject(object):
         if vertex_count == 0:
             return
 
-        # ShaderSet.selected[self.shader_type].use()
+        ShaderSet.selected[self.shader_type].use()
         self.bind()
 
         if self.single_color is not None:
             gl.glVertexAttrib4Nub(self.color.loc, *self.single_color)
+        elif self.texture:
+            self.texture.bind()
 
         if n_instances > 0:
             gl.glDrawArraysInstanced(primitive_type, first_vertex, vertex_count, n_instances * self.max_instance_divisor)
@@ -445,8 +454,9 @@ class VertexAttributeObject(object):
     def copy(cls, original):
         """ Copy a render object from one context to the other.
         """
-        new = VertexAttributeObject(original.primitive_type, original.first_vertex,
-            original.vertex_count, original.n_instances, original.shader_type)
+        new = VertexAttributeObject(original.primitive_type, original.n_instances, original.shader_type)
+        new.first_vertex = original.first_vertex
+        new.vertex_count = original.vertex_count
 
         # Bind the same attributes for the new renderobject
         # [size, buf_id, instance_divisor, datatype]
@@ -473,11 +483,6 @@ class RenderObject:
     def draw(self, *args, **kwargs):
         for child in self.children:
             child.draw(*args, **kwargs)
-
-class Polygon(RenderObject):
-    def __init__(self, vcontour=None, vfill=None, linecolor=None, fillcolor=None, **kwargs):
-        if vfill is not None:
-            
 
 
 class Circle(VertexAttributeObject):
@@ -552,7 +557,7 @@ class Font(object):
         return vertices, texcoords
 
     def prepare_text_string(self, text_string, char_size=16.0, text_color=(0.0, 1.0, 0.0), vertex_offset=(0.0, 0.0)):
-        ret = VertexAttributeObject(gl.GL_TRIANGLES, vertex_count=6 * len(text_string), shader_type='text')
+        ret = VertexAttributeObject(gl.GL_TRIANGLES, shader_type='text')
 
         vertices, texcoords = [], []
         w, h = char_size, char_size * self.char_ar
@@ -562,23 +567,23 @@ class Font(object):
             vertices  += v
             texcoords += t
 
-        ret.vertex.bind(np.array(vertices, dtype=np.float32))
-        ret.texcoords.bind(np.array(texcoords, dtype=np.float32))
-        ret.color.bind(np.array(text_color, dtype=np.uint8))
+        ret.set_attribs(vertex=np.array(vertices, dtype=np.float32),
+                        texcoords=np.array(texcoords, dtype=np.float32),
+                        color=np.array(text_color, dtype=np.uint8))
 
         ret.char_size  = char_size
         ret.block_size = (len(text_string), 1)
         return ret
 
     def prepare_text_instanced(self, text_array, textblock_size, origin_lat=None, origin_lon=None, text_color=None, char_size=16.0, vertex_offset=(0.0, 0.0)):
-        ret       = VertexAttributeObject(gl.GL_TRIANGLES, vertex_count=6, shader_type='text')
+        ret       = VertexAttributeObject(gl.GL_TRIANGLES, shader_type='text')
         w, h      = char_size, char_size * self.char_ar
         x, y      = vertex_offset
         v, t      = self.char(x, y, w, h)
         vertices  = v
         texcoords = t
-        ret.vertex.bind(np.array(vertices, dtype=np.float32))
-        ret.texcoords.bind(np.array(texcoords, dtype=np.float32))
+        ret.set_attribs(vertex=np.array(vertices, dtype=np.float32),
+                        texcoords=np.array(texcoords, dtype=np.float32))
 
         ret.texdepth.bind(text_array, instance_divisor=1, datatype=gl.GL_UNSIGNED_BYTE)
         divisor = textblock_size[0] * textblock_size[1]
