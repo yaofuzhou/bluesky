@@ -464,11 +464,21 @@ class VertexAttributeObject(object):
         return new
 
 
-class Shape(VertexAttributeObject):
-    ''' Convenience class for drawing different shapes. '''
+class RenderObject:
+    ''' Convenience class for drawing different (nested) objects. '''
 
-    def __init__(self, linecolor=None, fill=None, *args, **kwargs):
-        pass
+    def __init__(self):
+        self.children = list()
+
+    def draw(self, *args, **kwargs):
+        for child in self.children:
+            child.draw(*args, **kwargs)
+
+class Polygon(RenderObject):
+    def __init__(self, vcontour=None, vfill=None, linecolor=None, fillcolor=None, **kwargs):
+        if vfill is not None:
+            
+
 
 class Circle(VertexAttributeObject):
     ''' Convenience class for a circle. '''
