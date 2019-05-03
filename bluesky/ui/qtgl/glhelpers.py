@@ -246,9 +246,8 @@ class ShaderProgram():
         # check compilation error
         result = gl.glGetShaderiv(shader, gl.GL_COMPILE_STATUS)
         if not(result):
-            raise RuntimeError(gl.glGetShaderInfoLog(shader))
             gl.glDeleteShader(shader)
-            return
+            raise RuntimeError(gl.glGetShaderInfoLog(shader))
 
         self.shaders.append(shader)
 
@@ -262,10 +261,10 @@ class ShaderProgram():
         # check linking error
         result = gl.glGetProgramiv(self.program, gl.GL_LINK_STATUS)
         if not(result):
-            raise RuntimeError(gl.glGetProgramInfoLog(self.program))
             gl.glDeleteProgram(self.program)
             for i in range(0, len(self.shaders)):
                 gl.glDeleteShader(self.shaders[i])
+            raise RuntimeError(gl.glGetProgramInfoLog(self.program))
 
         # Clean up
         for i in range(0, len(self.shaders)):
