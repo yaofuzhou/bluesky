@@ -15,7 +15,7 @@ from bluesky.tools.aero import ft, nm, kts
 from bluesky.tools import geo
 from bluesky.navdatabase import load_aptsurface, load_coastlines
 from .glhelpers import ShaderSet, ShaderProgram, VertexAttributeObject, Font, \
-    GLBuffer, Circle, Rectangle, Texture
+    GLBuffer, Circle, Rectangle, Texture, Text
 
 
 # Register settings defaults
@@ -200,11 +200,6 @@ class RadarWidget(QGLWidget):
         wpt_size = settings.wpt_size
         ac_size = settings.ac_size
 
-        # Initialize font for radar view with specified settings
-        self.font = Font()
-        self.font.create_font_array()
-        self.font.init_shader(self.text_shader)
-
         # Load and bind world texture
         max_texture_size = gl.glGetIntegerv(gl.GL_MAX_TEXTURE_SIZE)
         print('Maximum supported texture size: %d' % max_texture_size)
@@ -283,15 +278,15 @@ class RadarWidget(QGLWidget):
         self.ac_symbol = VertexAttributeObject(gl.GL_TRIANGLE_FAN, vertex=acvertices)
         self.ac_symbol.set_attribs(lat=self.aclatbuf, lon=self.aclonbuf,
                                    color=self.accolorbuf, orientation=self.achdgbuf, instance_divisor=1)
-        self.aclabels = self.font.prepare_text_instanced(self.aclblbuf, (8, 3), self.aclatbuf, self.aclonbuf, self.accolorbuf, char_size=text_size, vertex_offset=(ac_size, -0.5 * ac_size))
+        self.aclabels = Text(self.aclblbuf, text_size, (8, 3), self.aclatbuf, self.aclonbuf, self.accolorbuf, (ac_size, -0.5 * ac_size), instanced=True)
 
         # ------- Conflict CPA lines ---------------------
         self.cpalines = VertexAttributeObject(gl.GL_LINES, vertex=self.confcpabuf, color=palette.conflict)
 
         # ------- Aircraft Route -------------------------
         self.route = VertexAttributeObject(gl.GL_LINES, vertex=ROUTE_SIZE * 8, color=palette.route, usage=gl.GL_DYNAMIC_DRAW)
-        self.routelbl = self.font.prepare_text_instanced(self.routelblbuf, (12, 2), self.routewplatbuf, self.routewplonbuf, char_size=text_size, vertex_offset=(wpt_size, 0.5 * wpt_size))
-        self.routelbl.color.bind(palette.route)
+        self.routelbl = Text(self.routelblbuf, text_size,
+                             (12, 2), self.routewplatbuf, self.routewplonbuf, palette.route, (wpt_size, 0.5 * wpt_size), instanced=True)
         rwptvertices = np.array([(-0.2 * wpt_size, -0.2 * wpt_size),
                                  ( 0.0,            -0.8 * wpt_size),
                                  ( 0.2 * wpt_size, -0.2 * wpt_size),
@@ -321,13 +316,16 @@ class RadarWidget(QGLWidget):
                 self.nnavaids += 1
             wptids += wptid[:5].ljust(5)
         npwpids = np.array(wptids, dtype=np.string_)
-        self.wptlabels = self.font.prepare_text_instanced(npwpids, (5, 1), self.waypoints.lat, self.waypoints.lon, char_size=text_size, vertex_offset=(wpt_size, 0.5 * wpt_size))
-        self.wptlabels.color.bind(palette.wptlabel)
-        del wptids
+        self.wptlabels = Text(npwpids, text_size, (5, 1), self.waypoints.lat,
+                              self.waypoints.lon, palette.wptlabel,
+                              (wpt_size, 0.5 * wpt_size), instanced=True)
+
         self.customwp = VertexAttributeObject(gl.GL_LINE_LOOP, vertex=self.waypoints.vertex, color=palette.wptsymbol)
         self.customwp.set_attribs(lat=CUSTWP_SIZE * 4, lon=CUSTWP_SIZE * 4, instance_divisor=1)
-        self.customwplbl = self.font.prepare_text_instanced(self.custwplblbuf, (10, 1), self.customwp.lat, self.customwp.lon, char_size=text_size, vertex_offset=(wpt_size, 0.5 * wpt_size))
-        self.customwplbl.color.bind(palette.wptlabel)
+        self.customwplbl = Text(self.custwplblbuf, text_size, (10, 1),
+                                self.customwp.lat, self.customwp.lon,
+                                palette.wptlabel, (wpt_size, 0.5 * wpt_size),
+                                instanced=True)
         # ------- Airports -------------------------------
         aptvertices = np.array([(-0.5 * apt_size, -0.5 * apt_size), (0.5 * apt_size, -0.5 * apt_size), (0.5 * apt_size, 0.5 * apt_size), (-0.5 * apt_size, 0.5 * apt_size)], dtype=np.float32)  # a square
         self.nairports = len(bs.navdb.aptlat)
@@ -345,9 +343,10 @@ class RadarWidget(QGLWidget):
         aptids = ''
         for aptid in apnames:
             aptids += aptid.ljust(4)
-        self.aptlabels = self.font.prepare_text_instanced(np.array(aptids, dtype=np.string_), (4, 1), self.airports.lat, self.airports.lon, char_size=text_size, vertex_offset=(apt_size, 0.5 * apt_size))
-        self.aptlabels.color.bind(palette.aptlabel)
-        del aptids
+        self.aptlabels = Text(np.array(aptids, dtype=np.string_), text_size,
+                              (4, 1), self.airports.lat, self.airports.lon,
+                              palette.aptlabel, (apt_size, 0.5 * apt_size),
+                              instanced=True)
 
         # Unbind VAO, VBO
         VertexAttributeObject.unbind_all()
@@ -371,25 +370,19 @@ class RadarWidget(QGLWidget):
             qCritical("""Your system reports that it supports OpenGL up to version %.1f. The minimum requirement for BlueSky is OpenGL 3.3.
                 Generally, AMD/ATI/nVidia cards from 2008 and newer support OpenGL 3.3, and Intel integrated graphics from the Haswell
                 generation and newer. If you think your graphics system should be able to support GL>=3.3 please open an issue report
-                on the BlueSky Github page (https://github.com/ProfHoekstra/bluesky/issues)""" % gl_version)
+                on the BlueSky Github page (https://github.com/TUDelft-CNS-ATM/bluesky/issues)""" % gl_version)
             return
 
         # background color
-        gl.glClearColor(*(palette.background + (0,)))
+        gl.glClearColor(*(palette.background + (255,)))
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
 
         try:
             self.shaderset.load_shaders()
 
-            self.color_shader = self.shaderset['normal']
-
-            # Compile shaders and link texture shader program
-            self.texture_shader = self.shaderset['textured']
-
             # Compile shaders and link text shader program
             self.text_shader = self.shaderset['text']
-
             self.ssd_shader = self.shaderset['ssd']
 
         except RuntimeError as e:
@@ -424,15 +417,8 @@ class RadarWidget(QGLWidget):
         self.shaderset.enable_wrap(False)
 
         if actdata.show_map:
-            # Select the texture shader
-            # self.texture_shader.use()
-
             # Draw map texture
-            # self.map_texture.bind()
             self.map.draw()
-
-        # Select the non-textured shader
-        # self.color_shader.use()
 
         # Draw coastlines
         if actdata.show_coast:
@@ -516,31 +502,17 @@ class RadarWidget(QGLWidget):
         if actdata.show_apt:
             self.airports.draw(n_instances=nairports)
 
-        # Text rendering
-        self.text_shader.use()
-        self.font.use()
-
         if actdata.show_apt:
-            self.font.set_char_size(self.aptlabels.char_size)
-            self.font.set_block_size(self.aptlabels.block_size)
             self.aptlabels.draw(n_instances=nairports)
         if actdata.show_wpt:
-            self.font.set_char_size(self.wptlabels.char_size)
-            self.font.set_block_size(self.wptlabels.block_size)
             self.wptlabels.draw(n_instances=nwaypoints)
             if self.ncustwpts > 0:
-                self.font.set_char_size(self.customwplbl.char_size)
-                self.font.set_block_size(self.customwplbl.block_size)
                 self.customwplbl.draw(n_instances=self.ncustwpts)
 
         if actdata.show_traf and self.route.vertex_count > 1:
-            self.font.set_char_size(self.routelbl.char_size)
-            self.font.set_block_size(self.routelbl.block_size)
             self.routelbl.draw()
 
         if self.naircraft > 0 and actdata.show_traf and actdata.show_lbl:
-            self.font.set_char_size(self.aclabels.char_size)
-            self.font.set_block_size(self.aclabels.block_size)
             self.aclabels.draw(n_instances=self.naircraft)
 
         # SSD

@@ -8,7 +8,7 @@ import numpy as np
 from ctypes import c_float, c_int, Structure
 
 import bluesky as bs
-from .glhelpers import ShaderSet, ShaderProgram, VertexAttributeObject
+from .glhelpers import ShaderSet, ShaderProgram, VertexAttributeObject, Text
 
 VERTEX_IS_LATLON, VERTEX_IS_METERS, VERTEX_IS_SCREEN, VERTEX_IS_GLXY = list(range(4))
 ATTRIB_VERTEX, ATTRIB_TEXCOORDS, ATTRIB_LAT, ATTRIB_LON, ATTRIB_ORIENTATION, ATTRIB_COLOR, ATTRIB_TEXDEPTH = list(range(7))
@@ -90,8 +90,8 @@ class ND(QGLWidget):
         self.makeCurrent()
 
         # Use the same font as the radarwidget
-        self.font = self.shareWidget.font.copy()
-        self.font.init_shader(self.text_shader)
+        # self.font = self.shareWidget.font.copy()
+        # self.font.init_shader(self.text_shader)
 
         edge = np.zeros(120, dtype=np.float32)
         edge[0:120:2] = 1.4 * np.sin(np.radians(np.arange(-60, 60, 2)))
@@ -151,8 +151,11 @@ class ND(QGLWidget):
         vown = np.array([0.0, 0.0, 0.0, -0.12, 0.065, -0.03, -0.065, -0.03, 0.022, -0.1, -0.022, -0.1], dtype=np.float32)
         self.ownship = VertexAttributeObject(gl.GL_LINES, vertex=vown, color=yellow)
 
-        self.spdlabel_text = self.font.prepare_text_string('GS    TAS', 0.05, white, (-0.98, 1.6))
-        self.spdlabel_val  = self.font.prepare_text_string('  000    000', 0.05, green, (-0.97, 1.6))
+        self.spdlabel_text = Text('GS    TAS', 0.05, color=white,
+                                  vertex_offset=(-0.98, 1.6))
+
+        self.spdlabel_val = Text('  000    000', 0.05, color=green,
+                                 vertex_offset=(-0.97, 1.6))
 
         self.waypoints = VertexAttributeObject.copy(self.shareWidget.waypoints)
         self.wptlabels = VertexAttributeObject.copy(self.shareWidget.wptlabels)

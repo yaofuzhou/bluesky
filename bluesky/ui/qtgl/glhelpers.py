@@ -504,19 +504,68 @@ class Rectangle(VertexAttributeObject):
         super().__init__(primitive_type, vertex=vrect, *args, **kwargs)
 
 
+class Text(VertexAttributeObject):
+    ''' Convenience class for a text object. '''
+
+    def __init__(self, text, charsize=16.0, blocksize=None, lat=None, lon=None, color=None, vertex_offset=None, font=None, instanced=False):
+        super().__init__(primitive_type=gl.GL_TRIANGLES, shader_type='text')
+        self.font = font or Font.getdefault()
+        self.blocksize = blocksize
+        self.charsize = charsize
+        w, h = charsize, charsize * self.font.char_ar
+        x, y = vertex_offset or (0.0, 0.0)
+        if instanced:
+            vertices, texcoords = self.font.char(x, y, w, h)
+        else:
+            vertices, texcoords = [], []
+            for i, c in enumerate(text):
+                v, t = self.font.char(x + i * w, y, w, h, ord(c))
+                vertices += v
+                texcoords += t
+
+        self.set_attribs(vertex=np.array(vertices, dtype=np.float32),
+                        texcoords=np.array(texcoords, dtype=np.float32))
+
+        if instanced:
+            self.texdepth.bind(text, instance_divisor=1,
+                               datatype=gl.GL_UNSIGNED_BYTE)
+        divisor = blocksize[0] * blocksize[1] if instanced else 0
+        if lat and lon:
+            self.set_attribs(lat=lat, lon=lon, instance_divisor=divisor)
+
+        if color:
+            self.color.bind(color, instance_divisor=divisor)
+        
+    def draw(self, first_vertex=None, vertex_count=None, n_instances=None):
+        ShaderSet.selected[self.shader_type].use()
+        self.font.use()
+        self.font.set_char_size(self.charsize)
+        if self.blocksize:
+            self.font.set_block_size(self.blocksize)
+        super().draw(first_vertex=first_vertex, vertex_count=vertex_count, n_instances=n_instances)
+
 class Font(object):
+    _fonts = list()
+
     def __init__(self, tex_id=0, char_ar=1.0):
         self.tex_id         = tex_id
-        self.loc_char_size  = 0
-        self.loc_block_size = 0
+        txtshader = ShaderSet.selected['text']
+        self.loc_char_size = gl.glGetUniformLocation(
+            txtshader.program, 'char_size')
+        self.loc_block_size = gl.glGetUniformLocation(
+            txtshader.program, 'block_size')
         self.char_ar        = char_ar
+        self.create_font_array()
+        Font._fonts.append(self)
+
+    @classmethod
+    def getdefault(cls):
+        if not cls._fonts:
+            return Font()
+        return cls._fonts[0]
 
     def copy(self):
         return Font(self.tex_id, self.char_ar)
-
-    def init_shader(self, program):
-        self.loc_char_size = gl.glGetUniformLocation(program.program, 'char_size')
-        self.loc_block_size = gl.glGetUniformLocation(program.program, 'block_size')
 
     def use(self):
         gl.glActiveTexture(gl.GL_TEXTURE0 + 0)

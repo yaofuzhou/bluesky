@@ -29,8 +29,8 @@ if platform.system().lower() == "windows":
 # Register settings defaults
 bs.settings.set_variable_defaults(gfx_path='data/graphics')
 
-palette.set_default_colours(stack_text=(0, 255, 0),
-                            stack_background=(102, 102, 102))
+palette.set_default_colors(stack_text=(0, 255, 0),
+                           stack_background=(102, 102, 102))
 
 fg = palette.stack_text
 bg = palette.stack_background
