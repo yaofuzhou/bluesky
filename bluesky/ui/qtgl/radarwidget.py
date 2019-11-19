@@ -380,9 +380,6 @@ class RadarWidget(QGLWidget):
 
         try:
             self.shaderset.load_shaders()
-
-            # Compile shaders and link text shader program
-            self.text_shader = self.shaderset['text']
             self.ssd_shader = self.shaderset['ssd']
 
         except RuntimeError as e:

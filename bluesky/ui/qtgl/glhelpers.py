@@ -604,50 +604,6 @@ class Font(object):
         texcoords = [(0, 0, c), (0, 1, c), (1, 0, c), (1, 0, c), (0, 1, c), (1, 1, c)]
         return vertices, texcoords
 
-    def prepare_text_string(self, text_string, char_size=16.0, text_color=(0.0, 1.0, 0.0), vertex_offset=(0.0, 0.0)):
-        ret = VertexAttributeObject(gl.GL_TRIANGLES, shader_type='text')
-
-        vertices, texcoords = [], []
-        w, h = char_size, char_size * self.char_ar
-        x, y = vertex_offset
-        for i, c in enumerate(text_string):
-            v, t = self.char(x + i * w, y, w, h, ord(c))
-            vertices  += v
-            texcoords += t
-
-        ret.set_attribs(vertex=np.array(vertices, dtype=np.float32),
-                        texcoords=np.array(texcoords, dtype=np.float32),
-                        color=np.array(text_color, dtype=np.uint8))
-
-        ret.char_size  = char_size
-        ret.block_size = (len(text_string), 1)
-        return ret
-
-    def prepare_text_instanced(self, text_array, textblock_size, origin_lat=None, origin_lon=None, text_color=None, char_size=16.0, vertex_offset=(0.0, 0.0)):
-        ret       = VertexAttributeObject(gl.GL_TRIANGLES, shader_type='text')
-        w, h      = char_size, char_size * self.char_ar
-        x, y      = vertex_offset
-        v, t      = self.char(x, y, w, h)
-        vertices  = v
-        texcoords = t
-        ret.set_attribs(vertex=np.array(vertices, dtype=np.float32),
-                        texcoords=np.array(texcoords, dtype=np.float32))
-
-        ret.texdepth.bind(text_array, instance_divisor=1, datatype=gl.GL_UNSIGNED_BYTE)
-        divisor = textblock_size[0] * textblock_size[1]
-        if origin_lat is not None:
-            ret.lat.bind(origin_lat, instance_divisor=divisor)
-        if origin_lon is not None:
-            ret.lon.bind(origin_lon, instance_divisor=divisor)
-
-        if text_color is not None:
-            ret.color.bind(text_color, instance_divisor=divisor)
-
-        ret.block_size = textblock_size
-        ret.char_size = char_size
-
-        return ret
-
 _glvar_sizes = {
     gl.GL_FLOAT: 1, gl.GL_FLOAT_VEC2: 2, gl.GL_FLOAT_VEC3: 3,
     gl.GL_FLOAT_VEC4: 4, gl.GL_FLOAT_MAT2: 4, gl.GL_FLOAT_MAT3: 9,
