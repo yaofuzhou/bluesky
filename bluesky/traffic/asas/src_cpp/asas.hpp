@@ -1,5 +1,4 @@
 #include <cmath>
-#include <pyhelpers.hpp>
 #include <geo.hpp>
 #include <iostream>
 #include <cmath>

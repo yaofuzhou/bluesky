@@ -281,6 +281,10 @@ class MVP(ConflictResolution):
         """Modified Voltage Potential (MVP) resolution method"""
         # Preliminary calculations-------------------------------------------------
 
+        # Get appropriate separation margins
+        rpz = max(conf.rpz[idx1], conf.rpz[idx2])
+        hpz = max(conf.hpz[idx1], conf.hpz[idx2])
+
         # Convert qdr from degrees to radians
         qdr = np.radians(qdr)
 
@@ -302,7 +306,7 @@ class MVP(ConflictResolution):
         dabsH = np.sqrt(dcpa[0]*dcpa[0]+dcpa[1]*dcpa[1])
 
         # Compute horizontal intrusion
-        iH = (conf.rpz * self.resofach) - dabsH
+        iH = (rpz * self.resofach) - dabsH
 
         # Exception handlers for head-on conflicts
         # This is done to prevent division by zero in the next step
@@ -313,12 +317,12 @@ class MVP(ConflictResolution):
 
         # If intruder is outside the ownship PZ, then apply extra factor
         # to make sure that resolution does not graze IPZ
-        if (conf.rpz * self.resofach) < dist and dabsH < dist:
+        if (rpz * self.resofach) < dist and dabsH < dist:
             # Compute the resolution velocity vector in horizontal direction.
             # abs(tcpa) because it bcomes negative during intrusion.
-            erratum=np.cos(np.arcsin((conf.rpz * self.resofach)/dist)-np.arcsin(dabsH/dist))
-            dv1 = (((conf.rpz * self.resofach)/erratum - dabsH)*dcpa[0])/(abs(tcpa)*dabsH)
-            dv2 = (((conf.rpz * self.resofach)/erratum - dabsH)*dcpa[1])/(abs(tcpa)*dabsH)
+            erratum=np.cos(np.arcsin((rpz * self.resofach)/dist)-np.arcsin(dabsH/dist))
+            dv1 = (((rpz * self.resofach)/erratum - dabsH)*dcpa[0])/(abs(tcpa)*dabsH)
+            dv2 = (((rpz * self.resofach)/erratum - dabsH)*dcpa[1])/(abs(tcpa)*dabsH)
         else:
             dv1 = (iH * dcpa[0]) / (abs(tcpa) * dabsH)
             dv2 = (iH * dcpa[1]) / (abs(tcpa) * dabsH)
@@ -327,7 +331,7 @@ class MVP(ConflictResolution):
 
         # Compute the  vertical intrusion
         # Amount of vertical intrusion dependent on vertical relative velocity
-        iV = (conf.hpz * self.resofacv) if abs(vrel[2])>0.0 else (conf.hpz * self.resofacv)-abs(drel[2])
+        iV = (hpz * self.resofacv) if abs(vrel[2])>0.0 else (hpz * self.resofacv)-abs(drel[2])
 
         # Get the time to solve the conflict vertically - tsolveV
         tsolV = abs(drel[2]/vrel[2]) if abs(vrel[2])>0.0 else tLOS
@@ -335,14 +339,14 @@ class MVP(ConflictResolution):
         # If the time to solve the conflict vertically is longer than the look-ahead time,
         # because the the relative vertical speed is very small, then solve the intrusion
         # within tinconf
-        if tsolV>conf.dtlookahead:
+        if tsolV > conf.dtlookahead[idx1]:
             tsolV = tLOS
-            iV    = (conf.hpz * self.resofacv)
+            iV = (hpz * self.resofacv)
 
         # Compute the resolution velocity vector in the vertical direction
         # The direction of the vertical resolution is such that the aircraft with
         # higher climb/decent rate reduces their climb/decent rate
-        dv3 = np.where(abs(vrel[2])>0.0,  (iV/tsolV)*(-vrel[2]/abs(vrel[2])), (iV/tsolV))
+        dv3 = np.where(abs(vrel[2]) > 0.0,  (iV / tsolV) * (-vrel[2] / abs(vrel[2])), (iV / tsolV))
 
         # It is necessary to cap dv3 to prevent that a vertical conflict
         # is solved in 1 timestep, leading to a vertical separation that is too

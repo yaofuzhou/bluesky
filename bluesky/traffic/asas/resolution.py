@@ -91,15 +91,16 @@ class ConflictResolution(ReplaceableSingleton, TrafficArrays):
                 # Aircraft should continue to resolve until there is no horizontal
                 # LOS. This is particularly relevant when vertical resolutions
                 # are used.
+                rpz = max(conf.rpz[idx1], conf.rpz[idx2])
                 hdist = np.linalg.norm(dist)
-                hor_los = hdist < conf.rpz
+                hor_los = hdist < rpz
 
                 # Bouncing conflicts:
                 # If two aircraft are getting in and out of conflict continously,
                 # then they it is a bouncing conflict. ASAS should stay active until
                 # the bouncing stops.
                 is_bouncing = abs(
-                    ownship.trk[idx1] - intruder.trk[idx2]) < 30.0 and hdist < conf.rpz * self.resofach
+                    ownship.trk[idx1] - intruder.trk[idx2]) < 30.0 and hdist < rpz * self.resofach
 
             # Start recovery for ownship if intruder is deleted, or if past CPA
             # and not in horizontal LOS or a bouncing conflict

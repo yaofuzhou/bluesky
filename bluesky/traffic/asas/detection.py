@@ -15,13 +15,11 @@ class ConflictDetection(ReplaceableSingleton, TrafficArrays):
     ''' Base class for Conflict Detection implementations. '''
     def __init__(self):
         TrafficArrays.__init__(self)
-        # [m] Horizontal separation minimum for detection
-        self.rpz = bs.settings.asas_pzr * nm
-        # [m] Vertical separation minimum for detection
-        self.hpz = bs.settings.asas_pzh * ft
         # [s] lookahead time
-        self.dtlookahead = bs.settings.asas_dtlookahead
-        self.dtnolook = 0.0
+        self.dtnolook_def = 0.0
+        self.dtlook_def = bs.settings.asas_dtlookahead
+        self.rpz_def = bs.settings.asas_pzr * nm
+        self.hpz_def = bs.settings.asas_pzh * ft
 
         # Conflicts and LoS detected in the current timestep (used for resolving)
         self.confpairs = list()
@@ -43,6 +41,12 @@ class ConflictDetection(ReplaceableSingleton, TrafficArrays):
         with RegisterElementParameters(self):
             self.inconf = np.array([], dtype=bool)  # In-conflict flag
             self.tcpamax = np.array([]) # Maximum time to CPA for aircraft in conflict
+            # [m] Horizontal separation minimum for detection
+            self.rpz = np.array([])
+            # [m] Vertical separation minimum for detection
+            self.hpz = np.array([])
+            self.dtlookahead = np.array([])
+            self.dtnolook = np.array([])
 
     def clearconfdb(self):
         ''' Clear conflict database. '''
@@ -63,10 +67,18 @@ class ConflictDetection(ReplaceableSingleton, TrafficArrays):
         self.clearconfdb()
         self.confpairs_all.clear()
         self.lospairs_all.clear()
-        self.rpz = bs.settings.asas_pzr * nm
-        self.hpz = bs.settings.asas_pzh * ft
-        self.dtlookahead = bs.settings.asas_dtlookahead
-        self.dtnolook = 0.0
+        self.dtlook_def = bs.settings.asas_dtlookahead
+        self.dtnolook_def = 0.0
+        self.rpz_def = bs.settings.asas_pzr * nm
+        self.hpz_def = bs.settings.asas_pzh * ft
+
+    def create(self, n=1):
+        super().create(n)
+        self.rpz[-n:] = self.rpz_def
+        self.hpz[-n:] = self.hpz_def
+        self.dtlookahead[-n:] = self.dtlook_def
+        self.dtnolook[-n:] = self.dtnolook_def
+
 
     @classmethod
     def setmethod(cls, name=''):
@@ -97,33 +109,60 @@ class ConflictDetection(ReplaceableSingleton, TrafficArrays):
         ConflictDetection.instance().clearconfdb()
         return True, f'Selected {method.__name__} as CD method.'
 
-    def setrpz(self, value=None):
+    def setrpz(self, value=None, idx=None):
         ''' Set the horizontal separation distance. '''
         if value is None:
-            return True, ("ZONER [radius (nm)]\nCurrent PZ radius: %.2f NM" % (self.rpz / nm))
-        self.rpz = value * nm
+            if idx is None:
+                return True, f"Default PZ radius is set to {self.rpz_def / nm} NM"
+            return True, ("Current PZ radius for selected aircraft: %.2f NM" % (self.rpz[idx] / nm))
+        if idx is None:
+            # When no aircraft given, change default value
+            self.rpz_def = value * nm
+            return True, f"Setting default PZ radius to {value} NM"
+        self.rpz[idx] = value * nm
+        return True, f"Setting PZ radius to {value} NM for selected aircraft"
 
-    def sethpz(self, value=None):
+    def sethpz(self, value=None, idx=None):
         ''' Set the vertical separation distance. '''
         if value is None:
-            return True, ("ZONEDH [height (ft)]\nCurrent PZ height: %.2f ft" % (self.hpz / ft))
-        self.hpz = value * ft
+            if idx is None:
+                return True, f"Default PZ height is set to {self.hpz_def / nm} ft"
+            return True, ("Current PZ height for selected aircraft: %.2f ft" % (self.hpz[idx] / ft))
+        if idx is None:
+            # When no aircraft given, change default value
+            self.hpz_def = value * nm
+            return True, f"Setting default PZ height to {value} ft"
+        self.hpz[idx] = value * ft
+        return True, f"Setting PZ height to {value} ft for selected aircraft"
 
-    def setdtlook(self, value=None):
+    def setdtlook(self, value=None, idx=None):
         ''' Set the lookahead time for conflict detection. '''
         if value is None:
-            return True, ("DTLOOK [time]\nCurrent value: %.1f sec" % self.dtlookahead)
-        self.dtlookahead = value
+            if idx is None:
+                return True, f"Default lookahead time: {self.dtlook_def} sec"
+            return True, f"Lookahead time for selected aircraft: {self.dtlookahead[idx]}"
+        if idx is None:
+            self.dtlook_def = value
+            return True, f"Setting default lookahead time to {value} sec"
+        self.dtlookahead[idx] = value
+        return True, f"Setting lookahead time to {value} sec for selected aircraft"
 
-    def setdtnolook(self, value=None):
+    def setdtnolook(self, value=None, idx=None):
         ''' Set the interval in which conflict detection is skipped after a
             conflict resolution. '''
         if value is None:
-            return True, ("DTNOLOOK [time]\nCurrent value: %.1f sec" % self.dtasas)
-        self.dtnolook = value
+            if idx is None:
+                return True, f"Default nolook time: {self.dtnolook_def} sec"
+            return True, f"Nolook time for selected aircraft: {self.dtnolook[idx]}"
+        if idx is None:
+            self.dtnolook_def = value
+            return True, f"Setting default nolook time to {value} sec"
+        self.dtnolook[idx] = value
+        return True, f"Setting nolook time to {value} sec for selected aircraft"
 
     def update(self, ownship, intruder):
         ''' Perform an update step of the Conflict Detection implementation. '''
+        print('Detection step, simt =', bs.sim.simt)
         self.confpairs, self.lospairs, self.inconf, self.tcpamax, self.qdr, \
             self.dist, self.dcpa, self.tcpa, self.tLOS = \
                 self.detect(ownship, intruder, self.rpz, self.hpz, self.dtlookahead)

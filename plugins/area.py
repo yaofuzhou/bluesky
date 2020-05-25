@@ -178,7 +178,6 @@ class Area(TrafficArrays):
                 # tLOS_new = np.asarray(traf.cd.tLOS)[idxnew]
                 # qdr_new = np.asarray(traf.cd.qdr)[idxnew]
                 # dist_new = np.asarray(traf.cd.dist)[idxnew]
-
                 newconf_unique = {frozenset(pair) for pair in confpairs_new}
                 ac1, ac2 = zip(*newconf_unique)
                 idx1 = traf.id2idx(ac1)

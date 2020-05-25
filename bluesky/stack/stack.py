@@ -416,10 +416,10 @@ def init(startup_scnfile):
             "Set simulation time step",
         ],
         "DTLOOK": [
-            "DTLOOK [time]",
-            "[float]",
-            bs.traf.cd.setdtlook,
-            "Set lookahead time in seconds for conflict detection",
+            "DTLOOK [acid, time OR time]",
+            "[acid/float,float]",
+            lambda *args: bs.traf.cd.setdtlook(*args[::-1]),
+            "Set lookahead time in seconds for selected aircraft. Default is changed when no aircraft is selected",
         ],
         "DTMULT": [
             "DTMULT multiplier",
@@ -428,10 +428,10 @@ def init(startup_scnfile):
             "Sel multiplication factor for fast-time simulation",
         ],
         "DTNOLOOK": [
-            "DTNOLOOK [time]",
-            "[float]",
-            bs.traf.cd.setdtnolook,
-            "Set interval for conflict detection",
+            "DTNOLOOK [acid, time OR time]",
+            "[acid/float,float]",
+            lambda *args: bs.traf.cd.setdtnolook(*args[::-1]),
+            "Set interval for conflict detection for selected aircraft. Default is changed when no aircraft is selected",
         ],
         "DUMPRTE": [
             "DUMPRTE acid",
@@ -792,15 +792,15 @@ def init(startup_scnfile):
             "Define a wind vector as part of the 2D or 3D wind field",
         ],
         "ZONEDH": [
-            "ZONEDH [height]",
-            "[float]",
-            bs.traf.cd.sethpz,
+            "ZONEDH [acid,height OR default height]",
+            "acid/float,[float]",
+            lambda *args: bs.traf.cd.sethpz(*args[::-1]),
             "Set half of the vertical protected zone dimensions in ft",
         ],
         "ZONER": [
-            "ZONER [radius]",
-            "[float]",
-            bs.traf.cd.setrpz,
+            "ZONER [acid,radius OR default radius]",
+            "acid/float,[float]",
+            lambda *args: bs.traf.cd.setrpz(*args[::-1]),
             "Set the radius of the horizontal protected zone dimensions in nm",
         ],
         "ZOOM": [
