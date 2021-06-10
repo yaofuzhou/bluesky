@@ -234,7 +234,7 @@ def floor():
 
 @syn.subcommand
 def takeover(numac:int):
-    ''' TAKEOVER: create a conflict with several aircraft overtaking eachother
+    ''' TAKEOVER: create a conflict with several aircraft overtaking each other
     '''
     sim.reset()
     mperdeg = 111319.
