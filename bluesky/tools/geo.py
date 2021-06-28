@@ -472,7 +472,7 @@ def init_interpo_dec():
         Step size:          1.0
         Result format:      CSV
     The grid size can be adjusted but the (1 deg by 1 deg) size should suffice 
-    for practical purpose, as long as the the grids cover the entire Earth
+    for practical purposes, as long as the the grids cover the entire Earth
     surface. The interpolation is performed at sea-level, but no significant
     difference would be noticed up to FL600 or beyond.
     See docstring of geo.magdec() for more information.
